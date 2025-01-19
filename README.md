@@ -7,9 +7,12 @@ A Python-based tool for calculating investment returns across multiple brokerage
 ### Requirements
 
 ```
-pandas>=1.5.0
-numpy>=1.21.0
-openpyxl>=3.0.0
+pandas>=2.2.3
+numpy>=2.0.2
+numpy_financial>=1.0.0
+openpyxl>=3.1.5
+python-dateutil>=2.9.0
+pytz>=2024.2
 ```
 
 Install dependencies:
@@ -22,11 +25,14 @@ pip install -r requirements.txt
 Create the following directory structure:
 ```
 ReturnsCalculator/
-├── IBKR/                  # IBKR reports and processed data
-├── Exante/               # Exante reports and processed data
-├── docs/                 # Documentation
+├── Input/                 # Input directory for raw broker files
+│   ├── IBKR/             # IBKR input files
+│   └── Exante/          # Exante input files
 ├── logs/                 # Processing logs
-└── results/              # Generated results
+└── results/             # Generated results
+    ├── Combined/        # Asset-weighted composite results
+    ├── IBKR_{client_name}/
+    └── Exante_{client_name}/
 ```
 
 ## Usage
@@ -37,112 +43,112 @@ ReturnsCalculator/
 
 2. Place the exported files in their respective directories:
    ```
-   IBKR/{client_name}.csv
-   Exante/{client_name}.csv
+   Input/IBKR/{client_name}.csv
+   Input/Exante/{client_name}.csv
    ```
 
 3. Calculate returns:
    ```bash
-   python calculation.py
+   python TWR_Calculator.py -i Input
    ```
 
    This will:
-   - Automatically process all IBKR and Exante files in their respective directories
+   - Automatically scan for and process all broker files
    - Generate processed data files in client-specific subdirectories
-   - Calculate returns and create result files
-   - No need to run `ibkr.py` or `exante.py` separately
-
-   The results will be available in the `results/` directory.
-
-> Note: While you can run `ibkr.py` and `exante.py` separately for debugging purposes, it's not necessary for normal operation as `calculation.py` handles the entire workflow.
+   - Calculate individual and composite returns
+   - Create timestamped result files in the results directory
 
 ## How It Works
 
 ### 1. Data Processing
 
-#### IBKR Processing (`ibkr.py`)
-- Reads the performance report CSV
-- Splits the file into sections:
-  - Allocation by Asset Class (daily portfolio values)
-  - Deposits and Withdrawals
-  - Dividends
-  - Fees
-  - Interest
-  - Trade Summary
-- Each section is saved as a separate CSV file in `IBKR/{client_name}/`
+The system processes broker files in three main steps:
 
-#### Exante Processing (`exante.py`)
-- Reads the tab-delimited CSV report
-- Extracts and processes:
-  - NAV data (daily portfolio values)
-  - Transaction history
-- Generates two Excel files in `Exante/{client_name}/`:
-  - NAV.xlsx: Daily portfolio values
-  - Trades.xlsx: Transaction history
+1. **Account Discovery**
+   - Scans Input directory for CSV files
+   - Identifies client names from filenames
+   - Creates processing directories
 
-### 2. Returns Calculation (`calculation.py`)
+2. **Broker-specific Processing**
+   - IBKR reports are split into component files:
+     - Allocation by Asset Class (NAV data)
+     - Deposits and Withdrawals
+     - Dividends, Fees, Interest details
+   - Exante reports are converted to:
+     - NAV.xlsx (daily portfolio values)
+     - Trades.xlsx (transactions and flows)
 
-The main calculation process follows these steps:
+3. **Returns Calculation**
+   - Calculates sub-period returns between cash flows
+   - Computes monthly TWR through geometric linking
+   - Generates rolling 6-month returns
+   - Calculates IRR using cash flows and NAVs
+   - Creates asset-weighted composite returns
 
-1. **Data Loading**
-   - Reads processed files from both IBKR and Exante directories
-   - Validates data consistency and formats
+### 2. Return Methodologies
 
-2. **Sub-period Returns**
-   - Calculates returns between each cash flow
-   - Uses Time-Weighted Return (TWR) methodology
-   - Accounts for deposits, withdrawals, and other cash flows
+#### Time-Weighted Return (TWR)
+- Eliminates impact of cash flow timing
+- Calculated between each cash flow
+- Geometrically linked for longer periods
+- Used for performance comparison
 
-3. **Monthly Returns**
-   - Aggregates sub-period returns into monthly returns
-   - Geometrically links returns within each month
-   - Captures start-of-month NAV for composite calculations
+#### Internal Rate of Return (IRR)
+- Considers timing and size of cash flows
+- Uses actual day count for annualization
+- Represents investor's actual experience
+- Calculated using numpy_financial.irr
 
-4. **Rolling Returns**
-   - Calculates rolling 6-month returns
-   - Provides medium-term performance perspective
+#### GIPS-style Composite
+- Asset-weighted using start-of-month NAVs
+- Only includes active accounts
+- Provides period-specific account lists
+- Composite IRR from aggregated flows
 
-5. **Composite Returns**
-   - Creates asset-weighted composite for all accounts
-   - Follows GIPS-like methodology
-   - Includes only active accounts in each period
+### 3. Output Files
 
-6. **Performance Metrics**
-   - Calculates absolute and annualized returns
-   - Computes Internal Rate of Return (IRR)
-   - Generates period-specific returns (2022, 2023, 2024 YTD)
+Results are saved with timestamps (YYYYMMDD_HHMMSS):
 
-### 3. Output Generation
+1. **Monthly Returns**
+   - Monthly TWR values
+   - Start-of-month NAVs
+   - Used for composite calculations
 
-Results are saved in the `results/` directory with timestamps:
-- Individual account results
-- Combined portfolio results
-- Monthly and rolling returns
-- Performance summaries
+2. **Six-Month Returns**
+   - Rolling 6-month periods
+   - Geometrically linked returns
+   - Performance trending analysis
 
-## File Formats
+3. **Return Summary**
+   - Total and annualized TWR
+   - Internal Rate of Return
+   - Period returns (2022, 2023, 2024 YTD)
+   - Active account listings
 
-For detailed information about file formats and structures, see [docs/files.md](docs/files.md).
+For detailed file formats and structures, see [docs/files.md](docs/files.md).
 
 ## Notes
 
 - All monetary values are converted to EUR
 - Returns are calculated net of fees
-- IBKR reports use varying date formats (MM/DD/YY or YYYYMMDD)
-- Exante dates are standardized to YYYY-MM-DD
-- Logs are generated in the `logs/` directory for troubleshooting
+- Reporting periods align with Feb-Jan cycle
+- Logs are generated in the logs directory
+- Results use YYYYMMDD_HHMMSS timestamps
 
 ## Error Handling
 
-The system includes comprehensive error handling:
 - Validates input file formats
-- Checks for missing or corrupted data
+- Handles missing or corrupted data
 - Logs processing errors and warnings
-- Gracefully handles missing sections in IBKR reports
+- Skips invalid return calculations
+- Provides detailed error messages
 
-## Limitations
+## Dependencies
 
-- IBKR reports must be in the standard performance report format
-- Exante reports must be tab-delimited CSV files
-- All accounts must use EUR as the base currency
-- Historical data limited to available broker reports 
+The system requires Python 3.8+ and the following key packages:
+- pandas: Data processing and analysis
+- numpy: Numerical computations
+- numpy_financial: IRR calculations
+- openpyxl: Excel file handling
+
+See requirements.txt for complete dependency list. 
