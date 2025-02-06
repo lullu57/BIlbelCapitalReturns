@@ -13,6 +13,7 @@ import numpy_financial as npf
 
 
 """
+@TODO
 Update comments
 - Remove those that aren't meaningful
 - Add more and explain better in the parts that do the mathematical calculations
@@ -509,7 +510,7 @@ def calculate_composite_irr(client_returns: List[Dict]) -> float:
         return
 
 
-def save_all_results(results: Dict, output_dir='Results'):
+def save_all_results(results: Dict, output_dir='results'):
     print(f"Saving results to {output_dir}...")
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     os.makedirs(output_dir, exist_ok=True)
@@ -625,8 +626,8 @@ if __name__ == "__main__":
     all_client_returns = []
 
     # Argument configuration
-    parser = argparse.ArgumentParser(description='Description')
-    parser.add_argument('-i', '--input-path', default='Input', help='Input path')
+    parser = argparse.ArgumentParser(description='A Python-based tool for calculating investment returns across multiple brokerage accounts for Bilbel Capital.')
+    parser.add_argument('-i', '--input-path', default='input', help='Input path')
     args = parser.parse_args()
 
     main()
