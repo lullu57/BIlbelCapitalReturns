@@ -474,11 +474,12 @@ def calculate_composite_irr(client_returns: List[Dict]) -> float:
                         'Date': sub_period_returns['start_date'],
                         'Net Asset Value': sub_period_returns['start_nav']
                     })
-                    # Add final NAV point
-                    nav_data = nav_data.append({
-                        'Date': sub_period_returns['end_date'].iloc[-1],
-                        'Net Asset Value': sub_period_returns['end_nav'].iloc[-1]
-                    }, ignore_index=True)
+                    # Add final NAV point without using deprecated DataFrame.append
+                    final_nav_point = pd.DataFrame({
+                        'Date': [sub_period_returns['end_date'].iloc[-1]],
+                        'Net Asset Value': [sub_period_returns['end_nav'].iloc[-1]]
+                    })
+                    nav_data = pd.concat([nav_data, final_nav_point], ignore_index=True)
                     all_navs.append(nav_data)
 
                 # Get trade data
