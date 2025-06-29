@@ -49,7 +49,7 @@ ReturnsCalculator/
 
 3. Calculate returns:
    ```bash
-   python TWR_Calculator.py -i Input
+   python twr_calculator.py -i Input
    ```
 
    This will:
@@ -151,4 +151,11 @@ The system requires Python 3.8+ and the following key packages:
 - numpy_financial: IRR calculations
 - openpyxl: Excel file handling
 
-See requirements.txt for complete dependency list. 
+See requirements.txt for complete dependency list.
+
+## Running Tests
+
+Install dev dependencies and run:
+```bash
+pytest -n auto
+```
