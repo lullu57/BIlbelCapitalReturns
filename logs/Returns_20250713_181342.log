@@ -1,0 +1,627 @@
+2025-07-13 18:13:42 - INFO - Processing Exante CSV file: input/Exante/Bernard.csv
+2025-07-13 18:13:42 - INFO - Detected encoding: utf-16
+2025-07-13 18:13:42 - INFO - Successfully read 11372 rows from the file
+2025-07-13 18:13:42 - INFO - Created output directory: input/Exante/Bernard
+2025-07-13 18:13:42 - INFO - Saved trades data to input/Exante/Bernard/Trades.xlsx
+2025-07-13 18:13:42 - INFO - Saved NAV data to input/Exante/Bernard/NAV.xlsx
+2025-07-13 18:13:42 - INFO - Reading Exante data from input/Exante/Bernard/NAV.xlsx and input/Exante/Bernard/Trades.xlsx
+2025-07-13 18:13:42 - INFO - Read 1289 NAV records and 262 trade records
+2025-07-13 18:13:42 - INFO - Filtered to 11 funding/withdrawal records
+2025-07-13 18:13:42 - INFO - Processed data from 2022-01-01 00:00:00 to 2025-07-12 00:00:00
+2025-07-13 18:13:42 - INFO - Calculating sub-period returns
+2025-07-13 18:13:42 - INFO - Found 1289 unique dates for sub-period calculations
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-01-01 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-01-02 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-01-03 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-01-04 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-01-05 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-01-06 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-01-07 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-01-08 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-01-09 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-01-10 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-01-11 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-01-12 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-01-13 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-01-14 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-01-15 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-01-16 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-01-17 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-01-18 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-01-19 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-01-20 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-01-21 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-01-22 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-01-23 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-01-24 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-01-25 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-01-26 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-01-27 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-01-28 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-01-29 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-01-30 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-01-31 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-02-01 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-02-02 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-02-03 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-02-04 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-02-05 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-02-06 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-02-07 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-02-08 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-02-09 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-02-10 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-02-11 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-02-12 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-02-13 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-02-14 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-02-15 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-02-16 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-02-17 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-02-18 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-02-19 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-02-20 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-02-21 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-02-22 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-02-23 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-02-24 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-02-25 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-02-26 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-02-27 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-02-28 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-03-01 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-03-02 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-03-03 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-03-04 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-03-05 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-03-06 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-03-07 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-03-08 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-03-09 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-03-10 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-03-11 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-03-12 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-03-13 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-03-14 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-03-15 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-03-16 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-03-17 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-03-18 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-03-19 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-03-20 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-03-21 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-03-22 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-03-23 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-03-24 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-03-25 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-03-26 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-03-27 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-03-28 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-03-29 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-03-30 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-03-31 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-04-01 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-04-02 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-04-03 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-04-04 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-04-05 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-04-06 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-04-07 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-04-08 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-04-09 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-04-10 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-04-11 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-04-12 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-04-13 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-04-14 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-04-15 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-04-16 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-04-17 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-04-18 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-04-19 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-04-20 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-04-21 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-04-22 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-04-23 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-04-24 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-04-25 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-04-26 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-04-27 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-04-28 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-04-29 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-04-30 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-05-01 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-05-02 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-05-03 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-05-04 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-05-05 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-05-06 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-05-07 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-05-08 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-05-09 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-05-10 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-05-11 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-05-12 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-05-13 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-05-14 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-05-15 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-05-16 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-05-17 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-05-18 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-05-19 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-05-20 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-05-21 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-05-22 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-05-23 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-05-24 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-05-25 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-05-26 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-05-27 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-05-28 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-05-29 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-05-30 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-05-31 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-06-01 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-06-02 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-06-03 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-06-04 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-06-05 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-06-06 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-06-07 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-06-08 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-06-09 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-06-10 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-06-11 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-06-12 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-06-13 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-06-14 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-06-15 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-06-16 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-06-17 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-06-18 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-06-19 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-06-20 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-06-21 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-06-22 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-06-23 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-06-24 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-06-25 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-06-26 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-06-27 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-06-28 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-06-29 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-06-30 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-07-01 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-07-02 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-07-03 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-07-04 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-07-05 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-07-06 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-07-07 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-07-08 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-07-09 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-07-10 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-07-11 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-07-12 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-07-13 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-07-14 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-07-15 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-07-16 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-07-17 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-07-18 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-07-19 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-07-20 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-07-21 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-07-22 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-07-23 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-07-24 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-07-25 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-07-26 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-07-27 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-07-28 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-07-29 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-07-30 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-07-31 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-08-01 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-08-02 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-08-03 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-08-04 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-08-05 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-08-06 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-08-07 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-08-08 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-08-09 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-08-10 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-08-11 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-08-12 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-08-13 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-08-14 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-08-15 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-08-16 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-08-17 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-08-18 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-08-19 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-08-20 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-08-21 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-08-22 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-08-23 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-08-24 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-08-25 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-08-26 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-08-27 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-08-28 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-08-29 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-08-30 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-08-31 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-09-01 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-09-02 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-09-03 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-09-04 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-09-05 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-09-06 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-09-07 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-09-08 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-09-09 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-09-10 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-09-11 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-09-12 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-09-13 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-09-14 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-09-15 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-09-16 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-09-17 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-09-18 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-09-19 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-09-20 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-09-21 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-09-22 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-09-23 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-09-24 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-09-25 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-09-26 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-09-27 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-09-28 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-09-29 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-09-30 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-10-01 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-10-02 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-10-03 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-10-04 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-10-05 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-10-06 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-10-07 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-10-08 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-10-09 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-10-10 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-10-11 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-10-12 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-10-13 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-10-14 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-10-15 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-10-16 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-10-17 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-10-18 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-10-19 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-10-20 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-10-21 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-10-22 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-10-23 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-10-24 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-10-25 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-10-26 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-10-27 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-10-28 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-10-29 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-10-30 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-10-31 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-11-01 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-11-02 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-11-03 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-11-04 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-11-05 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-11-06 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-11-07 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-11-08 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-11-09 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-11-10 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-11-11 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-11-12 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-11-13 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-11-14 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-11-15 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-11-16 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-11-17 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-11-18 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-11-19 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-11-20 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-11-21 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-11-22 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-11-23 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-11-24 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-11-25 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-11-26 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-11-27 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-11-28 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-11-29 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-11-30 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-12-01 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-12-02 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-12-03 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-12-04 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-12-05 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-12-06 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-12-07 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-12-08 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-12-09 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-12-10 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-12-11 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-12-12 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-12-13 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-12-14 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-12-15 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-12-16 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-12-17 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-12-18 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-12-19 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-12-20 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-12-21 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-12-22 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-12-23 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-12-24 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-12-25 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-12-26 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-12-27 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-12-28 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-12-29 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-12-30 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2022-12-31 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2023-01-01 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2023-01-02 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2023-01-03 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2023-01-04 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2023-01-05 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2023-01-06 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2023-01-07 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2023-01-08 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2023-01-09 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2023-01-10 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2023-01-11 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2023-01-12 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2023-01-13 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2023-01-14 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2023-01-15 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2023-01-16 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2023-01-17 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2023-01-18 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2023-01-19 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2023-01-20 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2023-01-21 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2023-01-22 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2023-01-23 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2023-01-24 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2023-01-25 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2023-01-26 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2023-01-27 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2023-01-28 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2023-01-29 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2023-01-30 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2023-01-31 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2023-02-01 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2023-02-02 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2023-02-03 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2023-02-04 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2023-02-05 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2023-02-06 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2023-02-07 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2023-02-08 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2023-02-09 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2023-02-10 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2023-02-11 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2023-02-12 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2023-02-13 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2023-02-14 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2023-02-15 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2023-02-16 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2023-02-17 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2023-02-18 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2023-02-19 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2023-02-20 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2023-02-21 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2023-02-22 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2023-02-23 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2023-02-24 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2023-02-25 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2023-02-26 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2023-02-27 00:00:00
+2025-07-13 18:13:42 - INFO - Calculated 865 sub-period returns
+2025-07-13 18:13:42 - INFO - Calculating monthly TWR
+2025-07-13 18:13:42 - INFO - Calculated 30 monthly returns
+2025-07-13 18:13:42 - INFO - Calculated 25 6-month rolling returns
+2025-07-13 18:13:42 - INFO - Calculated total returns: Absolute=172.91%, Annualized=49.42%
+2025-07-13 18:13:42 - INFO - Calculating IRR
+2025-07-13 18:13:42 - WARNING - Non-positive NAV values: initial=0.0, final=29.96
+2025-07-13 18:13:42 - INFO - Processing Exante CSV file: input/Exante/Roswitha.csv
+2025-07-13 18:13:42 - INFO - Detected encoding: utf-16
+2025-07-13 18:13:42 - INFO - Successfully read 1132 rows from the file
+2025-07-13 18:13:42 - INFO - Created output directory: input/Exante/Roswitha
+2025-07-13 18:13:42 - INFO - Saved trades data to input/Exante/Roswitha/Trades.xlsx
+2025-07-13 18:13:42 - INFO - Saved NAV data to input/Exante/Roswitha/NAV.xlsx
+2025-07-13 18:13:42 - INFO - Reading Exante data from input/Exante/Roswitha/NAV.xlsx and input/Exante/Roswitha/Trades.xlsx
+2025-07-13 18:13:42 - INFO - Read 331 NAV records and 42 trade records
+2025-07-13 18:13:42 - INFO - Filtered to 3 funding/withdrawal records
+2025-07-13 18:13:42 - INFO - Processed data from 2024-08-16 00:00:00 to 2025-07-12 00:00:00
+2025-07-13 18:13:42 - INFO - Calculating sub-period returns
+2025-07-13 18:13:42 - INFO - Found 331 unique dates for sub-period calculations
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2024-08-16 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2024-08-17 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2024-08-18 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2024-08-19 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2024-08-20 00:00:00
+2025-07-13 18:13:42 - WARNING - Invalid starting NAV (0.0) for period 2024-08-21 00:00:00
+2025-07-13 18:13:42 - INFO - Calculated 324 sub-period returns
+2025-07-13 18:13:42 - INFO - Calculating monthly TWR
+2025-07-13 18:13:42 - INFO - Calculated 12 monthly returns
+2025-07-13 18:13:42 - INFO - Calculated 7 6-month rolling returns
+2025-07-13 18:13:42 - INFO - Calculated total returns: Absolute=48.36%, Annualized=48.36%
+2025-07-13 18:13:42 - INFO - Calculating IRR
+2025-07-13 18:13:42 - WARNING - Non-positive NAV values: initial=0.0, final=36833.29
+2025-07-13 18:13:42 - INFO - Processing Exante CSV file: input/Exante/Gabi.csv
+2025-07-13 18:13:42 - INFO - Detected encoding: utf-16
+2025-07-13 18:13:42 - INFO - Successfully read 4672 rows from the file
+2025-07-13 18:13:42 - INFO - Created output directory: input/Exante/Gabi
+2025-07-13 18:13:43 - INFO - Saved trades data to input/Exante/Gabi/Trades.xlsx
+2025-07-13 18:13:43 - INFO - Saved NAV data to input/Exante/Gabi/NAV.xlsx
+2025-07-13 18:13:43 - INFO - Reading Exante data from input/Exante/Gabi/NAV.xlsx and input/Exante/Gabi/Trades.xlsx
+2025-07-13 18:13:43 - INFO - Read 1258 NAV records and 1910 trade records
+2025-07-13 18:13:43 - INFO - Filtered to 13 funding/withdrawal records
+2025-07-13 18:13:43 - INFO - Processed data from 2022-02-01 00:00:00 to 2025-07-12 00:00:00
+2025-07-13 18:13:43 - INFO - Calculating sub-period returns
+2025-07-13 18:13:43 - INFO - Found 1258 unique dates for sub-period calculations
+2025-07-13 18:13:43 - WARNING - Invalid starting NAV (0.0) for period 2022-02-01 00:00:00
+2025-07-13 18:13:43 - INFO - Calculated 1256 sub-period returns
+2025-07-13 18:13:43 - INFO - Calculating monthly TWR
+2025-07-13 18:13:43 - INFO - Calculated 42 monthly returns
+2025-07-13 18:13:43 - INFO - Calculated 37 6-month rolling returns
+2025-07-13 18:13:43 - INFO - Calculated total returns: Absolute=1277.08%, Annualized=111.55%
+2025-07-13 18:13:43 - INFO - Calculating IRR
+2025-07-13 18:13:43 - WARNING - Non-positive NAV values: initial=0.0, final=36.51
+2025-07-13 18:13:43 - INFO - Processing IBKR CSV file: input/IBKR/Bernard.csv
+2025-07-13 18:13:43 - INFO - Detected 12 columns in the file
+2025-07-13 18:13:43 - INFO - Successfully read 309 rows from the file
+2025-07-13 18:13:43 - INFO - Created output directory: input/IBKR/Bernard
+2025-07-13 18:13:43 - INFO - Found 3 sections to process
+2025-07-13 18:13:43 - INFO - Processing section: Breakdown of Accounts
+2025-07-13 18:13:43 - INFO - Saved processed data to input/IBKR/Bernard/breakdown_of_accounts.csv
+2025-07-13 18:13:43 - INFO - Processing section: Allocation by Asset Class
+2025-07-13 18:13:43 - INFO - Saved processed data to input/IBKR/Bernard/allocation_by_asset_class.csv
+2025-07-13 18:13:43 - INFO - Processing section: Deposits And Withdrawals
+2025-07-13 18:13:43 - INFO - Saved processed data to input/IBKR/Bernard/deposits_and_withdrawals.csv
+2025-07-13 18:13:43 - INFO - Successfully processed all sections and saved to input/IBKR/Bernard
+2025-07-13 18:13:43 - INFO - Reading IBKR data from input/IBKR/Bernard
+2025-07-13 18:13:43 - INFO - Reading NAV data from input/IBKR/Bernard/allocation_by_asset_class.csv
+2025-07-13 18:13:43 - INFO - Processed 257 NAV records from 2024-07-18 00:00:00 to 2025-07-11 00:00:00
+2025-07-13 18:13:43 - INFO - Reading flows data from input/IBKR/Bernard/deposits_and_withdrawals.csv
+2025-07-13 18:13:43 - INFO - Filtered to 13 legitimate cash flow records out of 41 total records
+2025-07-13 18:13:43 - INFO - Cash flow types included: {'Cash Receipts / Electronic Fund Transfers ': np.int64(10), 'Cash Receipts / Electronic Fund Transfers (n/a) ': np.int64(2), 'Disbursement Initiated By Bernard Sammut ': np.int64(1)}
+2025-07-13 18:13:43 - INFO - Successfully parsed dates in MM/DD/YY format
+2025-07-13 18:13:43 - INFO - Final processed data: 257 NAV records, 13 flow records
+2025-07-13 18:13:43 - INFO - Calculating sub-period returns
+2025-07-13 18:13:43 - INFO - Found 257 unique dates for sub-period calculations
+2025-07-13 18:13:43 - INFO - Calculated 256 sub-period returns
+2025-07-13 18:13:43 - INFO - Calculating monthly TWR
+2025-07-13 18:13:43 - INFO - Calculated 13 monthly returns
+2025-07-13 18:13:43 - INFO - Calculated 8 6-month rolling returns
+2025-07-13 18:13:43 - INFO - Calculated total returns: Absolute=165.68%, Annualized=146.44%
+2025-07-13 18:13:43 - INFO - Calculating IRR
+2025-07-13 18:13:43 - INFO - Calculated IRR: 3304061690639865344.00%
+2025-07-13 18:13:43 - INFO - Processing IBKR CSV file: input/IBKR/Roswitha.csv
+2025-07-13 18:13:43 - INFO - Detected 15 columns in the file
+2025-07-13 18:13:43 - INFO - Successfully read 377 rows from the file
+2025-07-13 18:13:43 - INFO - Created output directory: input/IBKR/Roswitha
+2025-07-13 18:13:43 - INFO - Found 7 sections to process
+2025-07-13 18:13:43 - INFO - Processing section: Allocation by Asset Class
+2025-07-13 18:13:43 - INFO - Saved processed data to input/IBKR/Roswitha/allocation_by_asset_class.csv
+2025-07-13 18:13:43 - INFO - Processing section: Trade Summary
+2025-07-13 18:13:43 - INFO - Saved processed data to input/IBKR/Roswitha/trade_summary.csv
+2025-07-13 18:13:43 - INFO - Processing section: Deposits And Withdrawals
+2025-07-13 18:13:43 - INFO - Saved processed data to input/IBKR/Roswitha/deposits_and_withdrawals.csv
+2025-07-13 18:13:43 - INFO - Processing section: Corporate Actions
+2025-07-13 18:13:43 - INFO - Saved processed data to input/IBKR/Roswitha/corporate_actions.csv
+2025-07-13 18:13:43 - INFO - Processing section: Dividends
+2025-07-13 18:13:43 - INFO - Saved processed data to input/IBKR/Roswitha/dividends.csv
+2025-07-13 18:13:43 - INFO - Processing section: Interest Details
+2025-07-13 18:13:43 - INFO - Saved processed data to input/IBKR/Roswitha/interest_details.csv
+2025-07-13 18:13:43 - INFO - Processing section: Fee Summary
+2025-07-13 18:13:43 - INFO - Saved processed data to input/IBKR/Roswitha/fee_summary.csv
+2025-07-13 18:13:43 - INFO - Successfully processed all sections and saved to input/IBKR/Roswitha
+2025-07-13 18:13:43 - INFO - Reading IBKR data from input/IBKR/Roswitha
+2025-07-13 18:13:43 - INFO - Reading NAV data from input/IBKR/Roswitha/allocation_by_asset_class.csv
+2025-07-13 18:13:43 - INFO - Processed 256 NAV records from 2024-07-19 00:00:00 to 2025-07-11 00:00:00
+2025-07-13 18:13:43 - INFO - Reading flows data from input/IBKR/Roswitha/deposits_and_withdrawals.csv
+2025-07-13 18:13:43 - INFO - Filtered to 11 legitimate cash flow records out of 11 total records
+2025-07-13 18:13:43 - INFO - Cash flow types included: {'Cash Receipts / Electronic Fund Transfers ': np.int64(10), 'Disbursement Initiated By Roswitha Sammut ': np.int64(1)}
+2025-07-13 18:13:43 - INFO - Successfully parsed dates in MM/DD/YY format
+2025-07-13 18:13:43 - INFO - Final processed data: 256 NAV records, 11 flow records
+2025-07-13 18:13:43 - INFO - Calculating sub-period returns
+2025-07-13 18:13:43 - INFO - Found 256 unique dates for sub-period calculations
+2025-07-13 18:13:43 - INFO - Calculated 255 sub-period returns
+2025-07-13 18:13:43 - INFO - Calculating monthly TWR
+2025-07-13 18:13:43 - INFO - Calculated 13 monthly returns
+2025-07-13 18:13:43 - INFO - Calculated 8 6-month rolling returns
+2025-07-13 18:13:43 - INFO - Calculated total returns: Absolute=54.78%, Annualized=49.66%
+2025-07-13 18:13:43 - INFO - Calculating IRR
+2025-07-13 18:13:43 - INFO - Calculated IRR: 20661121008641029579997184.00%
+2025-07-13 18:13:43 - INFO - Processing IBKR CSV file: input/IBKR/Gabi.csv
+2025-07-13 18:13:43 - INFO - Detected 15 columns in the file
+2025-07-13 18:13:43 - INFO - Successfully read 283 rows from the file
+2025-07-13 18:13:43 - INFO - Created output directory: input/IBKR/Gabi
+2025-07-13 18:13:43 - INFO - Found 5 sections to process
+2025-07-13 18:13:43 - INFO - Processing section: Allocation by Asset Class
+2025-07-13 18:13:43 - INFO - Saved processed data to input/IBKR/Gabi/allocation_by_asset_class.csv
+2025-07-13 18:13:43 - INFO - Processing section: Trade Summary
+2025-07-13 18:13:43 - INFO - Saved processed data to input/IBKR/Gabi/trade_summary.csv
+2025-07-13 18:13:43 - INFO - Processing section: Deposits And Withdrawals
+2025-07-13 18:13:43 - INFO - Saved processed data to input/IBKR/Gabi/deposits_and_withdrawals.csv
+2025-07-13 18:13:43 - INFO - Processing section: Dividends
+2025-07-13 18:13:43 - INFO - Saved processed data to input/IBKR/Gabi/dividends.csv
+2025-07-13 18:13:43 - INFO - Processing section: Fee Summary
+2025-07-13 18:13:43 - INFO - Saved processed data to input/IBKR/Gabi/fee_summary.csv
+2025-07-13 18:13:43 - INFO - Successfully processed all sections and saved to input/IBKR/Gabi
+2025-07-13 18:13:43 - INFO - Reading IBKR data from input/IBKR/Gabi
+2025-07-13 18:13:43 - INFO - Reading NAV data from input/IBKR/Gabi/allocation_by_asset_class.csv
+2025-07-13 18:13:43 - INFO - Processed 244 NAV records from 2024-08-06 00:00:00 to 2025-07-11 00:00:00
+2025-07-13 18:13:43 - INFO - Reading flows data from input/IBKR/Gabi/deposits_and_withdrawals.csv
+2025-07-13 18:13:43 - INFO - Filtered to 8 legitimate cash flow records out of 8 total records
+2025-07-13 18:13:43 - INFO - Cash flow types included: {'Cash Receipts / Electronic Fund Transfers ': np.int64(8)}
+2025-07-13 18:13:43 - INFO - Successfully parsed dates in MM/DD/YY format
+2025-07-13 18:13:43 - INFO - Final processed data: 244 NAV records, 8 flow records
+2025-07-13 18:13:43 - INFO - Calculating sub-period returns
+2025-07-13 18:13:43 - INFO - Found 244 unique dates for sub-period calculations
+2025-07-13 18:13:43 - INFO - Calculated 243 sub-period returns
+2025-07-13 18:13:43 - INFO - Calculating monthly TWR
+2025-07-13 18:13:43 - INFO - Calculated 12 monthly returns
+2025-07-13 18:13:43 - INFO - Calculated 7 6-month rolling returns
+2025-07-13 18:13:43 - INFO - Calculated total returns: Absolute=112.88%, Annualized=112.88%
+2025-07-13 18:13:43 - INFO - Calculating IRR
+2025-07-13 18:13:43 - INFO - Calculated IRR: 113787295174363.19%
+2025-07-13 18:13:43 - INFO - Building GIPS composite from account returns
+2025-07-13 18:13:43 - INFO - 2022 returns calculated using accounts: ['Exante_Gabi']
+2025-07-13 18:13:43 - INFO - 2023 returns calculated using accounts: ['Exante_Bernard', 'Exante_Gabi']
+2025-07-13 18:13:43 - INFO - 2024 YTD returns calculated using accounts: ['IBKR_Roswitha', 'Exante_Roswitha', 'Exante_Bernard', 'IBKR_Gabi', 'IBKR_Bernard', 'Exante_Gabi']
+2025-07-13 18:13:43 - INFO - 2025 YTD returns calculated using accounts: ['IBKR_Roswitha', 'Exante_Roswitha', 'Exante_Bernard', 'IBKR_Gabi', 'IBKR_Bernard', 'Exante_Gabi']
+2025-07-13 18:13:43 - INFO - Calculated composite returns for 42 months
+2025-07-13 18:13:43 - INFO - Calculated 37 6-month rolling returns
+2025-07-13 18:13:43 - INFO - Calculating IRR
+2025-07-13 18:13:43 - INFO - Calculated IRR: 44514756560868285962876220713556347859059205562143700097177977861241756743036570678617427784571528535958659698800829205335602426760920011762465691455498044724816977651196813660299907399411975186237865114311065600.00%
+2025-07-13 18:13:43 - INFO - Composite absolute return: 1901.63%
+2025-07-13 18:13:43 - INFO - Composite annualized return: 135.41%
+2025-07-13 18:13:43 - INFO - Composite IRR: 44514756560868285962876220713556347859059205562143700097177977861241756743036570678617427784571528535958659698800829205335602426760920011762465691455498044724816977651196813660299907399411975186237865114311065600.00%
+2025-07-13 18:13:43 - INFO - Saving results to results
+2025-07-13 18:13:43 - INFO - Saved results for Exante_Bernard
+2025-07-13 18:13:43 - INFO - - Monthly returns: monthly_returns_20250713_181343.xlsx
+2025-07-13 18:13:43 - INFO - - Six-month returns: six_month_returns_20250713_181343.xlsx
+2025-07-13 18:13:43 - INFO - - Summary statistics: return_summary_20250713_181343.xlsx
+2025-07-13 18:13:43 - INFO - Saved results for Exante_Roswitha
+2025-07-13 18:13:43 - INFO - - Monthly returns: monthly_returns_20250713_181343.xlsx
+2025-07-13 18:13:43 - INFO - - Six-month returns: six_month_returns_20250713_181343.xlsx
+2025-07-13 18:13:43 - INFO - - Summary statistics: return_summary_20250713_181343.xlsx
+2025-07-13 18:13:43 - INFO - Saved results for Exante_Gabi
+2025-07-13 18:13:43 - INFO - - Monthly returns: monthly_returns_20250713_181343.xlsx
+2025-07-13 18:13:43 - INFO - - Six-month returns: six_month_returns_20250713_181343.xlsx
+2025-07-13 18:13:43 - INFO - - Summary statistics: return_summary_20250713_181343.xlsx
+2025-07-13 18:13:43 - INFO - Saved results for IBKR_Bernard
+2025-07-13 18:13:43 - INFO - - Monthly returns: monthly_returns_20250713_181343.xlsx
+2025-07-13 18:13:43 - INFO - - Six-month returns: six_month_returns_20250713_181343.xlsx
+2025-07-13 18:13:43 - INFO - - Summary statistics: return_summary_20250713_181343.xlsx
+2025-07-13 18:13:43 - INFO - Saved results for IBKR_Roswitha
+2025-07-13 18:13:43 - INFO - - Monthly returns: monthly_returns_20250713_181343.xlsx
+2025-07-13 18:13:43 - INFO - - Six-month returns: six_month_returns_20250713_181343.xlsx
+2025-07-13 18:13:43 - INFO - - Summary statistics: return_summary_20250713_181343.xlsx
+2025-07-13 18:13:44 - INFO - Saved results for IBKR_Gabi
+2025-07-13 18:13:44 - INFO - - Monthly returns: monthly_returns_20250713_181343.xlsx
+2025-07-13 18:13:44 - INFO - - Six-month returns: six_month_returns_20250713_181343.xlsx
+2025-07-13 18:13:44 - INFO - - Summary statistics: return_summary_20250713_181343.xlsx
+2025-07-13 18:13:44 - INFO - Saved results for Combined
+2025-07-13 18:13:44 - INFO - - Monthly returns: monthly_returns_20250713_181343.xlsx
+2025-07-13 18:13:44 - INFO - - Six-month returns: six_month_returns_20250713_181343.xlsx
+2025-07-13 18:13:44 - INFO - - Summary statistics: return_summary_20250713_181343.xlsx

@@ -254,7 +254,7 @@ def process(file_path: str):
                 logging.warning("No trades data found")
 
         # Extract and save NAV section
-        nav_header = "NAV"
+        nav_header = "Net Asset Value "
         nav_df = extract_section(raw_data, nav_header, "NAV")
         if not nav_df.empty:
             nav_file = os.path.join(output_dir, "NAV.xlsx")

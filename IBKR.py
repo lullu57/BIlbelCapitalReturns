@@ -11,66 +11,108 @@ def read_data(client_dir: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Read and process IBKR data from the processed CSV files.
     Uses allocation_by_asset_class.csv for NAV and deposits_and_withdrawals.csv for flows.
-    Only considers 'Cash Receipts / Electronic Fund Transfers' as valid flows.
+    Now includes all legitimate cash flows including withdrawals.
     """
     logging.info(f"Reading IBKR data from {client_dir}")
-
+    
     # Read allocation data for NAV
     nav_file = os.path.join(client_dir, 'allocation_by_asset_class.csv')
     logging.info(f"Reading NAV data from {nav_file}")
     nav_df = pd.read_csv(nav_file)
-
+    
     # Process NAV data - now using proper column names
     try:
         nav_df['Date'] = pd.to_datetime(nav_df['Date'], format='%Y%m%d')
     except ValueError:
         logging.info("Trying alternative date format for NAV data")
         nav_df['Date'] = pd.to_datetime(nav_df['Date'], format='%m/%d/%y')
-
+    
     nav_df = nav_df.rename(columns={'NAV': 'Net Asset Value'})
     nav_df = nav_df[['Date', 'Net Asset Value']].copy()
     nav_df['Net Asset Value'] = pd.to_numeric(nav_df['Net Asset Value'], errors='coerce')
     nav_df = nav_df.sort_values('Date')
-
+    
     logging.info(f"Processed {len(nav_df)} NAV records from {nav_df['Date'].min()} to {nav_df['Date'].max()}")
-
+    
     # Read deposits and withdrawals data
     flows_file = os.path.join(client_dir, 'deposits_and_withdrawals.csv')
     logging.info(f"Reading flows data from {flows_file}")
     flows_df = pd.read_csv(flows_file)
-
-    # Filter for only valid flow descriptions
-    valid_descriptions = [
-        'Cash Receipts / Electronic Fund Transfers ',
-        'Cash Receipts / Electronic Fund Transfers (n/a) '
-    ]
-    flows_df = flows_df[flows_df['Description'].isin(valid_descriptions)]
-    logging.info(f"Filtered to {len(flows_df)} valid flow records")
-
-    # Process flows - using proper column names and handling MM/DD/YY format
-    try:
-        flows_df['When'] = pd.to_datetime(flows_df['Date'], format='%m/%d/%y')
-        logging.info("Successfully parsed dates in MM/DD/YY format")
-    except ValueError as e:
-        logging.warning(f"Failed to parse dates in MM/DD/YY format: {e}")
+    
+    # Filter for legitimate cash flows (include both deposits and withdrawals)
+    # Include: actual cash deposits and withdrawals
+    # Exclude: stock transfers, inter-account adjustments, and corporate actions
+    def is_legitimate_cash_flow(description):
+        description = str(description).strip()
+        
+        # Include legitimate deposits
+        if 'Cash Receipts / Electronic Fund Transfers' in description:
+            return True
+            
+        # Include legitimate withdrawals (disbursements)
+        if 'Disbursement Initiated By' in description:
+            return True
+            
+        # Exclude stock transfers (contain "Quantity:" in description)
+        if 'Quantity:' in description:
+            return False
+            
+        # Exclude inter-account transfer adjustments
+        if 'Adjustment: Cash Receipt / Disbursement / Transfer' in description:
+            return False
+            
+        # Exclude other adjustment types
+        if 'Adjustment:' in description:
+            return False
+            
+        return False
+    
+    # Apply the filtering
+    flows_df['is_valid_flow'] = flows_df['Description'].apply(is_legitimate_cash_flow)
+    valid_flows = flows_df[flows_df['is_valid_flow']]
+    
+    logging.info(f"Filtered to {len(valid_flows)} legitimate cash flow records out of {len(flows_df)} total records")
+    
+    # Log the types of flows we're including
+    if len(valid_flows) > 0:
         try:
-            flows_df['When'] = pd.to_datetime(flows_df['Date'], format='%Y%m%d')
-            logging.info("Successfully parsed dates in YYYYMMDD format")
+            flow_types = valid_flows['Description'].value_counts()
+            logging.info(f"Cash flow types included: {dict(flow_types)}")
+        except Exception as e:
+            logging.info(f"Could not log flow types: {str(e)}")
+    else:
+        logging.info("No valid cash flows found")
+    
+    # Process flows - using proper column names and handling MM/DD/YY format
+    if len(valid_flows) > 0:
+        valid_flows = valid_flows.copy()  # Ensure we're working with a proper DataFrame
+        try:
+            valid_flows['When'] = pd.to_datetime(valid_flows['Date'], format='%m/%d/%y')
+            logging.info("Successfully parsed dates in MM/DD/YY format")
         except ValueError as e:
-            logging.error(f"Failed to parse dates in both formats: {e}")
-            raise
-
-    flows_df['EUR equivalent'] = pd.to_numeric(flows_df['Amount'], errors='coerce')
-    flows_df['Operation type'] = 'FUNDING/WITHDRAWAL'
-    flows_df['Adjusted EUR'] = flows_df['EUR equivalent']  # No adjustment needed for deposits/withdrawals
-
+            logging.warning(f"Failed to parse dates in MM/DD/YY format: {str(e)}")
+            try:
+                valid_flows['When'] = pd.to_datetime(valid_flows['Date'], format='%Y%m%d')
+                logging.info("Successfully parsed dates in YYYYMMDD format")
+            except ValueError as e:
+                logging.error(f"Failed to parse dates in both formats: {str(e)}")
+                raise
+        
+        valid_flows['EUR equivalent'] = pd.to_numeric(valid_flows['Amount'], errors='coerce')
+        valid_flows['Operation type'] = 'FUNDING/WITHDRAWAL'
+        valid_flows['Adjusted EUR'] = valid_flows['EUR equivalent']  # No adjustment needed for deposits/withdrawals
+        
+        # Sort and finalize
+        flows_df = valid_flows[['When', 'Operation type', 'EUR equivalent', 'Adjusted EUR', 'Description']].sort_values('When')
+    else:
+        # Create empty DataFrame with correct columns if no valid flows
+        flows_df = pd.DataFrame(columns=['When', 'Operation type', 'EUR equivalent', 'Adjusted EUR', 'Description'])
+    
     # Sort and finalize
     nav_df = nav_df.sort_values('Date')
-    flows_df = flows_df[['When', 'Operation type', 'EUR equivalent', 'Adjusted EUR']].sort_values('When')
-
+    
     logging.info(f"Final processed data: {len(nav_df)} NAV records, {len(flows_df)} flow records")
     return nav_df, flows_df
-
 
 # Process section data to ensure consistent column names and format
 def process_section_data(section_df: pd.DataFrame, section_name: str) -> pd.DataFrame:
