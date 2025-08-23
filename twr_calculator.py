@@ -6,6 +6,8 @@ from typing import Tuple, List, Dict
 import os
 import IBKR
 import Exante
+import POEMS
+import MoneyBase
 import logging
 import openpyxl
 import utils
@@ -28,6 +30,17 @@ def scan_for_accounts():
     global brokerages
     print('Scanning for accounts...')
     for brokerage in brokerages:
+        # POEMS and MoneyBase are manual brokerages with hard-coded data, so we just register the two
+        # known clients without looking for CSVs.
+        if brokerage in ['POEMS', 'MoneyBase']:
+            for client in ['Bernard', 'Roswitha']:
+                brokerages[brokerage][client] = {
+                    'source_csv': '',  # not used
+                    'output_dir': client  # just the client name, POEMS.read_data ignores parent dirs
+                }
+            print(f"Registered {brokerage} accounts: {', '.join(brokerages[brokerage].keys())}")
+            continue
+
         input_path = os.path.join(args.input_path, brokerage)
         if os.path.exists(input_path):
             for file in os.listdir(input_path):
@@ -55,12 +68,14 @@ def process_brokerage(broker_name, process, read_data):
             nav_df, trades_df = read_data(files['output_dir'])
             sub_period_returns = calculate_sub_period_returns(nav_df, trades_df)
             monthly_returns = calculate_monthly_twr(sub_period_returns)
-            six_month_returns = calculate_six_month_returns(monthly_returns)
-            absolute_return, annualized_return = calculate_total_returns(monthly_returns)
+            # Build daily series directly from NAV and flows to mirror reference TWR
+            daily_returns = build_daily_returns_direct(nav_df, trades_df)
+            # Use daily-compounded TWR for totals to ensure no days are missed
+            absolute_return, annualized_return = calculate_total_returns_from_daily(daily_returns)
 
             results = {
                 'monthly_returns': monthly_returns,
-                'six_month_returns': six_month_returns,
+                'daily_returns': daily_returns,
                 'absolute_return': absolute_return,
                 'annualized_return': annualized_return,
                 'sub_period_returns': sub_period_returns,
@@ -140,38 +155,145 @@ def calculate_sub_period_returns(nav_df: pd.DataFrame, trades_df: pd.DataFrame) 
     logging.info(f"Calculated {len(returns_df)} sub-period returns")
     return returns_df
 
+
+def build_daily_returns(nav_df: pd.DataFrame, trades_df: pd.DataFrame, sub_period_returns: pd.DataFrame) -> pd.DataFrame:
+    """
+    Build a per-day series with TWR-consistent daily returns using sub-periods.
+    - For periods with consecutive daily NAVs, this yields actual daily returns.
+    - For sparse NAVs (e.g., monthly), returns are 0 on interim days and applied on the
+      end date of the sub-period.
+    The output has columns: date, return, start_nav, end_nav, flow
+    """
+    if sub_period_returns.empty:
+        return pd.DataFrame(columns=['date', 'return', 'start_nav', 'end_nav', 'flow'])
+
+    # Prepare flows per day
+    flow_col = 'Adjusted EUR' if 'Adjusted EUR' in trades_df.columns else 'EUR equivalent'
+    flows_by_day = (
+        trades_df.groupby(pd.to_datetime(trades_df['When']).dt.normalize())[flow_col]
+        .sum()
+        .to_dict()
+    )
+
+    # Ensure NAV dates are normalized and sorted
+    nav_df = nav_df.copy()
+    nav_df['Date'] = pd.to_datetime(nav_df['Date']).dt.normalize()
+    nav_df = nav_df.sort_values('Date')
+
+    daily_rows: List[Dict] = []
+
+    # Iterate each sub-period
+    for _, sp in sub_period_returns.iterrows():
+        period_start = pd.to_datetime(sp['start_date']).normalize()
+        period_end = pd.to_datetime(sp['end_date']).normalize()
+        r = float(sp['return']) if pd.notna(sp['return']) else 0.0
+
+        # Track baseline NAV for period return
+        period_start_nav = float(sp['start_nav']) if pd.notna(sp['start_nav']) else 0.0
+
+        # current_nav represents the NAV carried day-to-day through the period
+        current_nav = period_start_nav
+
+        # Iterate calendar days strictly after start up to and including end
+        for dt in pd.date_range(period_start + pd.Timedelta(days=1), period_end, freq='D'):
+            start_nav_today = current_nav
+            flow_today = float(flows_by_day.get(dt, 0.0))
+
+            if dt == period_end:
+                # Apply period return on the period baseline NAV, not on flows
+                return_today = r
+                return_impact = r * period_start_nav
+            else:
+                return_today = 0.0
+                return_impact = 0.0
+
+            end_nav_today = start_nav_today + flow_today + return_impact
+
+            daily_rows.append({
+                'date': dt,
+                'return': return_today,
+                'start_nav': start_nav_today,
+                'end_nav': end_nav_today,
+                'flow': flow_today,
+            })
+
+            current_nav = end_nav_today
+
+    daily_df = pd.DataFrame(daily_rows)
+    if not daily_df.empty:
+        daily_df = daily_df.sort_values('date')
+    return daily_df
+
+
+def build_daily_returns_direct(nav_df: pd.DataFrame, trades_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Build daily returns using the reference method:
+      r_i = (end_nav - flow_on_end_date) / start_nav - 1
+    where flows on the day are treated as occurring at the start of that day.
+    """
+    daily = build_account_daily_from_nav_flows(nav_df, trades_df)
+    if daily.empty:
+        return pd.DataFrame(columns=['date', 'return', 'start_nav', 'end_nav', 'flow'])
+
+    daily = daily.sort_values('date')
+    def compute_ret(row):
+        start_v = float(row['start_nav']) if pd.notna(row['start_nav']) else 0.0
+        if start_v <= 0:
+            return 0.0
+        end_v = float(row['end_nav']) if pd.notna(row['end_nav']) else start_v
+        flow_v = float(row['flow']) if pd.notna(row['flow']) else 0.0
+        return (end_v - flow_v) / start_v - 1.0
+
+    daily['return'] = daily.apply(compute_ret, axis=1)
+    return daily[['date', 'return', 'start_nav', 'end_nav', 'flow']]
+
 def calculate_monthly_twr(sub_period_returns: pd.DataFrame) -> pd.DataFrame:
     """
-    Calculate monthly TWR by geometrically linking sub-period returns.
-    Also includes end-of-month NAV for GIPS composite calculation.
+    Calculate monthly TWR by geometrically linking daily-like sub-period returns.
+    We attribute each sub-period's return to its end_date day, then compound all
+    such daily values within the same calendar month. This prevents losing a
+    cross-boundary sub-period that starts in one month and ends in the next.
+
+    Adds start_of_month_nav, end_of_month_nav, and monthly_flow for auditability.
     """
-    logging.info("Calculating monthly TWR")
-    
+    logging.info("Calculating monthly TWR from sub-period (daily) returns")
+
     if sub_period_returns.empty:
         logging.warning("No sub-period returns to calculate monthly TWR")
-        return pd.DataFrame(columns=['month', 'return', 'end_of_month_nav', 'nav'])
-    
-    sub_period_returns['month'] = pd.to_datetime(sub_period_returns['start_date']).dt.to_period('M')
-    
-    monthly_returns = []
-    for month, group in sub_period_returns.groupby('month'):
-        monthly_return = np.prod(1 + group['return']) - 1
-        
+        return pd.DataFrame(
+            columns=['month', 'return', 'start_of_month_nav', 'end_of_month_nav', 'monthly_flow', 'nav']
+        )
+
+    df = sub_period_returns.copy()
+    df['end_date'] = pd.to_datetime(df['end_date']).dt.normalize()
+    df = df.sort_values('end_date')
+    # Month keyed by end_date so periods that end in a month are counted for that month
+    df['month'] = df['end_date'].dt.to_period('M')
+
+    monthly_rows: List[Dict] = []
+    for month, in_month in df.groupby('month'):
+        if in_month.empty:
+            continue
+
+        monthly_return = float(np.prod(1 + in_month['return']) - 1)
         if not np.isfinite(monthly_return):
             logging.warning(f"Invalid return calculation for month {month}")
             continue
-        
-        # Get end-of-month NAV (last end_nav in the month)
-        end_of_month_nav = group.iloc[-1]['end_nav']
-            
-        monthly_returns.append({
+
+        start_of_month_nav = float(in_month.iloc[0]['start_nav']) if 'start_nav' in in_month.columns else np.nan
+        end_of_month_nav = float(in_month.iloc[-1]['end_nav']) if 'end_nav' in in_month.columns else np.nan
+        monthly_flow = float(in_month['total_flow'].sum()) if 'total_flow' in in_month.columns else np.nan
+
+        monthly_rows.append({
             'month': month,
             'return': monthly_return,
+            'start_of_month_nav': start_of_month_nav,
             'end_of_month_nav': end_of_month_nav,
-            'nav': end_of_month_nav  # Add consistent NAV column name
+            'monthly_flow': monthly_flow,
+            'nav': end_of_month_nav,
         })
-    
-    monthly_returns_df = pd.DataFrame(monthly_returns)
+
+    monthly_returns_df = pd.DataFrame(monthly_rows)
     logging.info(f"Calculated {len(monthly_returns_df)} monthly returns")
     return monthly_returns_df
 
@@ -206,83 +328,221 @@ def calculate_six_month_returns(monthly_returns: pd.DataFrame) -> pd.DataFrame:
     return rolling_returns_df
 
 
-def calculate_total_returns(monthly_returns: pd.DataFrame) -> Tuple[float, float]:
-    """
-    Calculate total absolute and annualized returns
-    """
-    print("Calculating total returns...")
 
-    if monthly_returns.empty:
-        logging.warning("No monthly returns to calculate total returns")
+
+
+def calculate_total_returns_from_subperiods(sub_period_returns: pd.DataFrame) -> Tuple[float, float]:
+    """
+    Calculate total absolute and annualized returns from sub-period returns.
+    Annualization uses elapsed calendar time between first start_date and last end_date.
+    """
+    if sub_period_returns.empty:
         return 0.0, 0.0
 
-    valid_returns = monthly_returns[np.isfinite(monthly_returns['return'])]
-
-    if valid_returns.empty:
-        logging.warning("No valid returns to calculate total returns")
+    valid = sub_period_returns[np.isfinite(sub_period_returns['return'])]
+    if valid.empty:
         return 0.0, 0.0
 
-    absolute_return = np.prod(1 + valid_returns['return']) - 1
-    num_years = len(valid_returns) / 12
+    absolute_return = float((1 + valid['return']).prod() - 1)
 
-    if num_years > 0:
-        annualized_return = (1 + absolute_return) ** (1 / num_years) - 1
+    start_dt = pd.to_datetime(sub_period_returns['start_date']).min()
+    end_dt = pd.to_datetime(sub_period_returns['end_date']).max()
+    elapsed_years = max((end_dt - start_dt).days, 0) / 365.25
+    if elapsed_years > 0:
+        annualized_return = (1 + absolute_return) ** (1 / elapsed_years) - 1
     else:
         annualized_return = absolute_return
 
-    logging.info(f"Calculated total returns: Absolute={absolute_return:.2%}, Annualized={annualized_return:.2%}")
-    return absolute_return, annualized_return
+    return absolute_return, float(annualized_return)
+
+
+def calculate_total_returns_from_daily(daily_returns: pd.DataFrame) -> Tuple[float, float]:
+    """
+    Calculate total absolute and annualized returns from a daily returns series.
+    Annualization uses elapsed calendar time between first and last date.
+    """
+    if not isinstance(daily_returns, pd.DataFrame) or daily_returns.empty or 'return' not in daily_returns.columns:
+        return 0.0, 0.0
+
+    valid = daily_returns[np.isfinite(daily_returns['return'])]
+    if valid.empty:
+        return 0.0, 0.0
+
+    absolute_return = float((1 + valid['return']).prod() - 1)
+    start_dt = pd.to_datetime(valid['date']).min()
+    end_dt = pd.to_datetime(valid['date']).max()
+    elapsed_years = max((end_dt - start_dt).days, 0) / 365.25
+    if elapsed_years > 0:
+        annualized_return = (1 + absolute_return) ** (1 / elapsed_years) - 1
+    else:
+        annualized_return = absolute_return
+
+    return absolute_return, float(annualized_return)
 
 
 def aggregate_client_returns(client_returns: List[Dict]):
     """
-    Aggregate returns across multiple accounts using GIPS-style asset-weighted composite returns.
+    Aggregate returns across multiple accounts using daily sub-period series.
+    - Build a composite daily series by summing start/end NAV and flows, then
+      applying the sub-period return formula at the composite level.
+    - Derive composite monthly returns by geometrically linking daily returns.
     """
-    print("Aggregating client returns using GIPS composite method...")
+    print("Aggregating client returns using daily composite method...")
 
     if not client_returns:
         logging.warning("No client returns to aggregate")
         return
 
-    # Collect monthly returns from all accounts
-    monthly_returns_by_account = {}
+    # Gather daily series per account
+    daily_by_account: Dict[str, pd.DataFrame] = {}
     for account_data in client_returns:
-        monthly_returns = account_data.get('monthly_returns')
         account_name = account_data.get('account_name', 'Unknown')
-        if not monthly_returns.empty:
-            monthly_returns_by_account[account_name] = monthly_returns
+        daily_df = account_data.get('daily_returns')
+        if isinstance(daily_df, pd.DataFrame) and not daily_df.empty:
+            daily_by_account[account_name] = daily_df.copy()
 
-    # Calculate GIPS composite
-    composite_df, period_returns = build_gips_composite(monthly_returns_by_account)
-
-    if composite_df.empty:
-        logging.warning("No composite returns calculated")
+    if not daily_by_account:
+        logging.warning("No daily series available for composite aggregation")
         return
 
-    # Calculate six-month rolling returns from composite returns
-    composite_monthly = composite_df[['month', 'composite_return', 'total_nav']].rename(
-        columns={'composite_return': 'return', 'total_nav': 'nav'}
-    )
-    # Add consistent column names for NAV
-    composite_monthly['end_of_month_nav'] = composite_monthly['nav']
-    
-    composite_six_month = calculate_six_month_returns(composite_monthly)
+    # Composite daily via iterative summation
+    composite_daily = build_daily_composite(daily_by_account)
 
-    # Calculate total returns from composite growth
-    final_growth = composite_df['composite_growth'].iloc[-1]
-    num_years = len(composite_df) / 12
-    annualized_return = (1 + final_growth) ** (1 / num_years) - 1 if num_years > 0 else final_growth
+    # Derive monthly from daily
+    composite_daily['month'] = pd.to_datetime(composite_daily['date']).dt.to_period('M')
+    monthly_rows: List[Dict] = []
+    for month, grp in composite_daily.groupby('month'):
+        monthly_return = (1 + grp['return']).prod() - 1
+        start_of_month_nav = grp.iloc[0]['start_nav_total']
+        end_of_month_nav = grp.iloc[-1]['end_nav_total']
+        monthly_flow = grp['flow_total'].sum()
+        monthly_rows.append({
+            'month': month,
+            'return': monthly_return,
+            'start_of_month_nav': start_of_month_nav,
+            'end_of_month_nav': end_of_month_nav,
+            'monthly_flow': monthly_flow,
+            'nav': end_of_month_nav,
+        })
+    composite_monthly = pd.DataFrame(monthly_rows)
 
-    logging.info(f"Composite absolute return: {final_growth:.2%}")
-    logging.info(f"Composite annualized return: {annualized_return:.2%}")
+    # Period returns and totals
+    composite_df_for_periods = composite_monthly.rename(columns={'return': 'composite_return'})
+    composite_df_for_periods['composite_growth'] = (1 + composite_df_for_periods['composite_return']).cumprod() - 1
+    composite_df_for_periods['date'] = pd.to_datetime(composite_df_for_periods['month'].astype(str))
+
+    # Reuse period window logic from build_gips_composite
+    period_returns: Dict = {}
+    for label, (start_s, end_s) in {
+        '2022': ('2022-02-01', '2023-01-31'),
+        '2023': ('2023-02-01', '2024-01-31'),
+        '2024_ytd': ('2024-02-01', '2025-01-31'),
+        '2025_ytd': ('2025-02-01', '2026-01-31'),
+    }.items():
+        period_df = composite_df_for_periods[(composite_df_for_periods['date'] >= start_s) & (composite_df_for_periods['date'] <= end_s)]
+        if not period_df.empty:
+            ret = float((1 + period_df['composite_return']).prod() - 1)
+            # Determine active accounts within the period window
+            start_dt = pd.to_datetime(start_s)
+            end_dt = pd.to_datetime(end_s)
+            active_accounts: List[str] = []
+            for acc_name, df in daily_by_account.items():
+                if not isinstance(df, pd.DataFrame) or df.empty:
+                    continue
+                d = df.copy()
+                d['date'] = pd.to_datetime(d['date']).dt.normalize()
+                in_range = d[(d['date'] >= start_dt) & (d['date'] <= end_dt)]
+                if in_range.empty:
+                    continue
+                # Consider account active if it had positive NAV in the window
+                has_nav = False
+                for col in ['start_nav', 'end_nav']:
+                    if col in in_range.columns and np.isfinite(in_range[col]).any():
+                        if (in_range[col] > 0).any():
+                            has_nav = True
+                            break
+                if has_nav:
+                    active_accounts.append(acc_name)
+            period_returns[label] = {'return': ret, 'accounts': active_accounts}
+
+    # Compute totals from daily to ensure exact TWR compounding
+    abs_total, ann_total = calculate_total_returns_from_daily(composite_daily)
 
     all_results['Combined'] = {
         'monthly_returns': composite_monthly,
-        'six_month_returns': composite_six_month,
-        'absolute_return': final_growth,
-        'annualized_return': annualized_return,
-        'period_returns': period_returns
+        'daily_returns': composite_daily[['date', 'return', 'start_nav_total', 'end_nav_total', 'flow_total']].rename(columns={
+            'start_nav_total': 'start_nav',
+            'end_nav_total': 'end_nav',
+            'flow_total': 'flow',
+        }),
+        'absolute_return': abs_total,
+        'annualized_return': float(ann_total),
+        'period_returns': period_returns,
     }
+
+
+def build_daily_composite(daily_by_account: Dict[str, pd.DataFrame]) -> pd.DataFrame:
+    """
+    Given per-account daily series with columns date, return, start_nav, end_nav, flow,
+    build a composite daily series using sub-period formula on totals.
+    """
+    # Normalize and collect date set
+    date_set = set()
+    normalized = {}
+    for name, df in daily_by_account.items():
+        d = df.copy()
+        d['date'] = pd.to_datetime(d['date']).dt.normalize()
+        d = d.sort_values('date')
+        normalized[name] = d
+        date_set.update(d['date'].tolist())
+
+    if not date_set:
+        return pd.DataFrame(columns=['date', 'return', 'start_nav_total', 'end_nav_total', 'flow_total'])
+
+    all_dates = sorted(date_set)
+
+    # Build maps for quick lookup and track last known end_nav per account
+    per_account_by_date = {name: {row['date']: row for _, row in df.iterrows()} for name, df in normalized.items()}
+    last_end_nav: Dict[str, float] = {}
+
+    rows: List[Dict] = []
+    for dt in all_dates:
+        start_total = 0.0
+        end_total = 0.0
+        flow_total = 0.0
+
+        for name, by_date in per_account_by_date.items():
+            if dt in by_date:
+                row = by_date[dt]
+                start_nav = float(row['start_nav']) if pd.notna(row['start_nav']) else 0.0
+                end_nav = float(row['end_nav']) if pd.notna(row['end_nav']) else start_nav
+                flow = float(row.get('flow', 0.0))
+                last_end_nav[name] = end_nav
+            else:
+                # If we have prior activity, carry forward NAV with 0 flow
+                if name in last_end_nav:
+                    start_nav = last_end_nav[name]
+                    end_nav = start_nav
+                    flow = 0.0
+                else:
+                    start_nav = 0.0
+                    end_nav = 0.0
+                    flow = 0.0
+
+            start_total += start_nav
+            end_total += end_nav
+            flow_total += flow
+
+        daily_return = (end_total - start_total - flow_total) / start_total if start_total > 0 else 0.0
+        rows.append({
+            'date': dt,
+            'return': daily_return,
+            'start_nav_total': start_total,
+            'end_nav_total': end_total,
+            'flow_total': flow_total,
+        })
+
+    return pd.DataFrame(rows)
 
 
 def build_gips_composite(monthly_returns_dfs: Dict[str, pd.DataFrame]) -> Tuple[pd.DataFrame, Dict]:
@@ -309,8 +569,10 @@ def build_gips_composite(monthly_returns_dfs: Dict[str, pd.DataFrame]) -> Tuple[
     composite_results = []
     for month in sorted(all_months):
         active_accounts = []
-        month_navs = {}  # Store NAVs by account for this month
+        month_navs = {}  # Store end-of-month NAVs by account for this month
         month_returns = {}  # Store returns by account for this month
+        start_month_navs = {}  # Store start-of-month NAVs by account if available
+        month_flows = {}  # Store monthly flows by account if available
         
         # First gather all valid data for this month
         for account, df in monthly_returns_dfs.items():
@@ -323,10 +585,27 @@ def build_gips_composite(monthly_returns_dfs: Dict[str, pd.DataFrame]) -> Tuple[
                     month_navs[account] = nav
                     month_returns[account] = monthly_return
                     active_accounts.append(account)
+
+                    # Optional diagnostics: start-of-month NAV and monthly flow
+                    if 'start_of_month_nav' in month_data.columns:
+                        som = month_data['start_of_month_nav'].iloc[0]
+                        if np.isfinite(som):
+                            start_month_navs[account] = som
+                    if 'monthly_flow' in month_data.columns:
+                        flow_val = month_data['monthly_flow'].iloc[0]
+                        try:
+                            flow_num = float(flow_val)
+                        except Exception:
+                            flow_num = np.nan
+                        if np.isfinite(flow_num):
+                            month_flows[account] = flow_num
         
         if month_navs and month_returns:  # Only proceed if we have valid data
             # Calculate total NAV for this month
             total_nav = sum(month_navs.values())
+            # Optional aggregates for auditability
+            start_of_month_total_nav = sum(start_month_navs.values()) if start_month_navs else np.nan
+            monthly_flow_total = sum(month_flows.values()) if month_flows else np.nan
             
             # Calculate NAV-weighted composite return for this month
             weighted_return = sum(
@@ -338,6 +617,8 @@ def build_gips_composite(monthly_returns_dfs: Dict[str, pd.DataFrame]) -> Tuple[
                 'month': month,
                 'composite_return': weighted_return,
                 'total_nav': total_nav,
+                'start_of_month_total_nav': start_of_month_total_nav,
+                'monthly_flow_total': monthly_flow_total,
                 'active_accounts': ','.join(active_accounts)
             })
     
@@ -411,9 +692,84 @@ def build_gips_composite(monthly_returns_dfs: Dict[str, pd.DataFrame]) -> Tuple[
             'accounts': list(set(','.join(period_2025['active_accounts']).split(',')))
         }
         logging.info(f"2025 YTD returns calculated using accounts: {period_returns['2025_ytd']['accounts']}")
-
     logging.info(f"Calculated composite returns for {len(composite_df)} months")
     return composite_df, period_returns
+
+
+def build_synthetic_composite(nav_dfs: Dict[str, pd.DataFrame], flow_dfs: Dict[str, pd.DataFrame]) -> pd.DataFrame:
+    """
+    Build a synthetic composite using daily values derived from NAV snapshots and flows.
+    Steps:
+      1) For each account, create a full daily series [date, start_nav, end_nav, flow]
+         by carrying forward NAV on non-snapshot days and attributing flows on their dates.
+      2) Build a composite daily series via totals and the sub-period formula.
+      3) Aggregate composite daily to monthly using geometric linking.
+
+    Returns DataFrame with columns: month (Period), return (float).
+    """
+    if not nav_dfs:
+        return pd.DataFrame(columns=['month', 'return'])
+
+    # Create per-account daily series from raw nav/flow data
+    daily_by_account: Dict[str, pd.DataFrame] = {}
+    for name, nav in nav_dfs.items():
+        flows = flow_dfs.get(name, pd.DataFrame(columns=['When', 'EUR equivalent']))
+        daily_by_account[name] = build_account_daily_from_nav_flows(nav, flows)
+
+    # Build composite daily
+    composite_daily = build_daily_composite(daily_by_account)
+    if composite_daily.empty:
+        return pd.DataFrame(columns=['month', 'return'])
+
+    # Aggregate to monthly
+    composite_daily['month'] = pd.to_datetime(composite_daily['date']).dt.to_period('M')
+    monthly_rows: List[Dict] = []
+    for month, grp in composite_daily.groupby('month'):
+        monthly_return = float((1 + grp['return']).prod() - 1)
+        monthly_rows.append({'month': month, 'return': monthly_return})
+    return pd.DataFrame(monthly_rows)
+
+
+def build_account_daily_from_nav_flows(nav_df: pd.DataFrame, flow_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Construct a daily series for a single account from NAV snapshots and flows.
+    For each day in the continuous range between min(Date, When) and max(Date, When):
+      - start_nav: prior day's end_nav (or 0 if none)
+      - end_nav: NAV snapshot for the day if provided; else start_nav
+      - flow: sum of flows occurring on that day
+    """
+    if not isinstance(nav_df, pd.DataFrame) or nav_df.empty:
+        return pd.DataFrame(columns=['date', 'start_nav', 'end_nav', 'flow'])
+
+    n = nav_df.copy()
+    n['Date'] = pd.to_datetime(n['Date']).dt.normalize()
+    n = n.sort_values('Date')
+    nav_by_day = {d: float(v) for d, v in zip(n['Date'], n['Net Asset Value'])}
+
+    if isinstance(flow_df, pd.DataFrame) and not flow_df.empty:
+        f = flow_df.copy()
+        f['When'] = pd.to_datetime(f['When']).dt.normalize()
+        flows_by_day = f.groupby('When')['EUR equivalent'].sum().to_dict()
+        min_flow_date = f['When'].min()
+        max_flow_date = f['When'].max()
+    else:
+        flows_by_day = {}
+        min_flow_date = None
+        max_flow_date = None
+
+    min_date = n['Date'].min() if min_flow_date is None else min(n['Date'].min(), min_flow_date)
+    max_date = n['Date'].max() if max_flow_date is None else max(n['Date'].max(), max_flow_date)
+
+    rows: List[Dict] = []
+    prev_end = 0.0
+    for dt in pd.date_range(min_date, max_date, freq='D'):
+        start_nav = prev_end
+        end_nav = float(nav_by_day.get(dt, start_nav))
+        flow = float(flows_by_day.get(dt, 0.0))
+        rows.append({'date': dt.normalize(), 'start_nav': start_nav, 'end_nav': end_nav, 'flow': flow})
+        prev_end = end_nav
+
+    return pd.DataFrame(rows)
 
 
 
@@ -432,58 +788,97 @@ def save_all_results(results: Dict, output_dir: str = 'results') -> None:
         os.makedirs(category_dir, exist_ok=True)
         
         monthly_file = os.path.join(category_dir, f'monthly_returns_{timestamp}.xlsx')
-        six_month_file = os.path.join(category_dir, f'six_month_returns_{timestamp}.xlsx')
+        daily_file = os.path.join(category_dir, f'daily_returns_{timestamp}.xlsx')
         summary_file = os.path.join(category_dir, f'return_summary_{timestamp}.xlsx')
         
+        # Ensure monthly returns exist; if missing or malformed, derive from daily
+        monthly_returns_obj = data.get('monthly_returns')
+        if isinstance(monthly_returns_obj, pd.DataFrame) and 'return' in monthly_returns_obj.columns:
+            monthly_returns = monthly_returns_obj.copy()
+        elif isinstance(data.get('daily_returns'), pd.DataFrame) and not data['daily_returns'].empty:
+            dr = data['daily_returns'].copy()
+            dr['date'] = pd.to_datetime(dr['date']).dt.normalize()
+            dr['month'] = dr['date'].dt.to_period('M')
+            monthly_rows: List[Dict] = []
+            for month, grp in dr.groupby('month'):
+                mret = (1 + grp['return']).prod() - 1
+                som = grp.iloc[0].get('start_nav', np.nan)
+                eom = grp.iloc[-1].get('end_nav', np.nan)
+                mflow = grp.get('flow', pd.Series(dtype=float)).sum() if 'flow' in grp.columns else np.nan
+                monthly_rows.append({'month': month, 'return': mret, 'start_of_month_nav': som, 'end_of_month_nav': eom, 'monthly_flow': mflow, 'nav': eom})
+            monthly_returns = pd.DataFrame(monthly_rows)
+        else:
+            monthly_returns = pd.DataFrame(columns=['month', 'return', 'start_of_month_nav', 'end_of_month_nav', 'monthly_flow', 'nav'])
+
         # Format monthly returns as percentages
-        monthly_returns = data['monthly_returns'].copy()
-        monthly_returns['return'] = monthly_returns['return'].map('{:.4%}'.format)
+        if 'return' in monthly_returns.columns:
+            monthly_returns['return'] = monthly_returns['return'].map('{:.4%}'.format)
         
-        # Format NAV columns as currency if they exist
+        # Format NAV/flow columns as currency if they exist
         if 'nav' in monthly_returns.columns:
             monthly_returns['nav'] = monthly_returns['nav'].map('€{:,.2f}'.format)
         if 'end_of_month_nav' in monthly_returns.columns:
             monthly_returns['end_of_month_nav'] = monthly_returns['end_of_month_nav'].map('€{:,.2f}'.format)
+        if 'start_of_month_nav' in monthly_returns.columns:
+            monthly_returns['start_of_month_nav'] = monthly_returns['start_of_month_nav'].map('€{:,.2f}'.format)
+        if 'monthly_flow' in monthly_returns.columns:
+            monthly_returns['monthly_flow'] = monthly_returns['monthly_flow'].map('€{:,.2f}'.format)
         
-        # Format six-month returns as percentages
-        six_month_returns = data['six_month_returns'].copy()
-        six_month_returns['return'] = six_month_returns['return'].map('{:.4%}'.format)
-        
-        # Save to Excel
+        # Save to Excel (Monthly)
         with pd.ExcelWriter(monthly_file, engine='openpyxl') as writer:
             monthly_returns.to_excel(writer, index=False)
             # Set column width for better readability
             worksheet = writer.sheets['Sheet1']
             worksheet.column_dimensions['B'].width = 15
-            # Set wider columns for NAV data if present
+            # Set wider columns for NAV/flow data if present
             if 'nav' in monthly_returns.columns:
                 nav_col = chr(ord('A') + list(monthly_returns.columns).index('nav'))
                 worksheet.column_dimensions[nav_col].width = 18
             if 'end_of_month_nav' in monthly_returns.columns:
                 nav_col = chr(ord('A') + list(monthly_returns.columns).index('end_of_month_nav'))
                 worksheet.column_dimensions[nav_col].width = 18
+            if 'start_of_month_nav' in monthly_returns.columns:
+                nav_col = chr(ord('A') + list(monthly_returns.columns).index('start_of_month_nav'))
+                worksheet.column_dimensions[nav_col].width = 18
+            if 'monthly_flow' in monthly_returns.columns:
+                nav_col = chr(ord('A') + list(monthly_returns.columns).index('monthly_flow'))
+                worksheet.column_dimensions[nav_col].width = 18
         
-        with pd.ExcelWriter(six_month_file, engine='openpyxl') as writer:
-            six_month_returns.to_excel(writer, index=False)
-            # Set column width for better readability
-            worksheet = writer.sheets['Sheet1']
-            worksheet.column_dimensions['C'].width = 15
+        # Save to Excel (Daily) if present
+        if 'daily_returns' in data and isinstance(data['daily_returns'], pd.DataFrame):
+            daily_returns = data['daily_returns'].copy()
+            if not daily_returns.empty and 'return' in daily_returns.columns:
+                daily_returns['return'] = daily_returns['return'].map('{:.4%}'.format)
+            # Format NAV/flow
+            for col in ['start_nav', 'end_nav', 'flow']:
+                if col in daily_returns.columns:
+                    daily_returns[col] = daily_returns[col].map('€{:,.2f}'.format)
+            with pd.ExcelWriter(daily_file, engine='openpyxl') as writer:
+                daily_returns.to_excel(writer, index=False)
+                worksheet = writer.sheets['Sheet1']
+                # Set useful widths
+                if 'date' in daily_returns.columns:
+                    worksheet.column_dimensions['A'].width = 15
+                # Widen numeric columns
+                for idx, col in enumerate(daily_returns.columns, start=1):
+                    if col in ['start_nav', 'end_nav', 'flow']:
+                        worksheet.column_dimensions[chr(ord('A') + idx - 1)].width = 18
         
-        # Create summary DataFrame with all return metrics
+        # Create summary DataFrame with all return metrics based on daily compounding
         summary_data = []
         
         # Add blank row for spacing
         summary_data.append({'Metric': '', 'Value': ''})
         
-        # Add TWR returns
+        # Add TWR returns (from daily compounding if available)
         summary_data.extend([
             {
                 'Metric': 'Total Absolute Return (TWR)',
-                'Value': f'{data["absolute_return"]:.4%}'
+                'Value': f'{data.get("absolute_return", 0.0):.4%}'
             },
             {
                 'Metric': 'Annualized Return (TWR)',
-                'Value': f'{data["annualized_return"]:.4%}'
+                'Value': f'{data.get("annualized_return", 0.0):.4%}'
             }
         ])
         
@@ -526,7 +921,8 @@ def save_all_results(results: Dict, output_dir: str = 'results') -> None:
         
         logging.info(f"Saved results for {category}")
         logging.info(f"- Monthly returns: {os.path.basename(monthly_file)}")
-        logging.info(f"- Six-month returns: {os.path.basename(six_month_file)}")
+        if os.path.exists(daily_file):
+            logging.info(f"- Daily returns: {os.path.basename(daily_file)}")
         logging.info(f"- Summary statistics: {os.path.basename(summary_file)}")
 
 
@@ -552,12 +948,14 @@ def main():
 
 if __name__ == "__main__":
     # Dictionary that holds the accounts for each brokerage
-    brokerages = {'Exante': {}, 'IBKR': {}}
+    brokerages = {'Exante': {}, 'IBKR': {}, 'POEMS': {}, 'MoneyBase': {}}
 
     # Functions used by process_brokerage() for each brokerage
     functions = {
         "IBKR": (IBKR.process, IBKR.read_data),
         "Exante": (Exante.process, Exante.read_data),
+        "POEMS": (POEMS.process, POEMS.read_data),
+        "MoneyBase": (MoneyBase.process, MoneyBase.read_data),
     }
 
     # Data structures storing results
