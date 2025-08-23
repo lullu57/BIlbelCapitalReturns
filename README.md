@@ -1,18 +1,25 @@
 # Returns Calculator
 
-A Python-based tool for calculating investment returns across multiple brokerage accounts (IBKR, Exante, and Poems). The system processes broker-specific reports and generates standardized returns metrics including Time-Weighted Returns (TWR) and Internal Rate of Return (IRR).
+A Python-based tool for calculating investment returns across multiple brokerage accounts (IBKR and Exante). The system processes broker-specific reports and generates standardized returns metrics including Time-Weighted Returns (TWR) and Internal Rate of Return (IRR).
 
 ## Setup
 
 ### Requirements
 
 ```
-pandas>=2.2.3
-numpy>=2.0.2
-numpy_financial>=1.0.0
-openpyxl>=3.1.5
-python-dateutil>=2.9.0
-pytz>=2024.2
+et_xmlfile==2.0.0
+numpy==2.0.2
+openpyxl==3.1.5
+pandas==2.2.3
+python-dateutil==2.9.0.post0
+pytz==2024.2
+six==1.17.0
+tzdata==2024.2
+numpy_financial==1.0.0
+pytest==8.2.1
+pytest-cov==5.0.0
+pytest-xdist==3.5.0
+hypothesis==6.98.8
 ```
 
 Install dependencies:
@@ -24,15 +31,22 @@ pip install -r requirements.txt
 
 Create the following directory structure:
 ```
-ReturnsCalculator/
+BIlbelCapitalReturns/
 ├── Input/                 # Input directory for raw broker files
 │   ├── IBKR/             # IBKR input files
 │   └── Exante/          # Exante input files
 ├── logs/                 # Processing logs
-└── results/             # Generated results
-    ├── Combined/        # Asset-weighted composite results
-    ├── IBKR_{client_name}/
-    └── Exante_{client_name}/
+├── results/             # Generated results
+│   ├── Combined/        # Asset-weighted composite results
+│   ├── IBKR_{client_name}/
+│   └── Exante_{client_name}/
+├── docs/                # Documentation files
+├── tests/               # Test suite
+├── twr_calculator.py    # Main calculator engine
+├── IBKR.py             # IBKR data processing
+├── Exante.py           # Exante data processing
+├── utils.py            # Utility functions
+└── pytest.ini          # Test configuration
 ```
 
 ## Usage
@@ -47,7 +61,14 @@ ReturnsCalculator/
    Input/Exante/{client_name}.csv
    ```
 
-3. Calculate returns:
+3. Set up the project:
+   ```bash
+   git clone <repository-url>
+   cd BIlbelCapitalReturns
+   pip install -r requirements.txt
+   ```
+
+4. Calculate returns:
    ```bash
    python twr_calculator.py -i Input
    ```
