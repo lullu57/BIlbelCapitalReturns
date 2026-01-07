@@ -1,7 +1,13 @@
-NAV
-Date	Net Asset Value
-2024-01-01	100
+Account Summary	
+Account	Balance	Currency
+TEST123	10000.00	EUR
 
-Transaction ID
-Transaction ID	Date	Amount
-1	2024-01-02	10
+Net Asset Value 	
+Date	Net Asset Value
+2024-01-01	100000.00
+2024-02-01	108000.00
+2024-03-01	115000.00
+
+Transaction ID	When	Symbol ID	ISIN	Operation type	Amount	Asset	EUR equivalent
+TXN001	2024-01-15	EUR	N/A	FUNDING/WITHDRAWAL	5000.00	EUR	5000.00
+TXN002	2024-02-10	EUR	N/A	FUNDING/WITHDRAWAL	-1000.00	EUR	-1000.00

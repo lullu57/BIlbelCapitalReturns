@@ -2,15 +2,40 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 import argparse
-from typing import Tuple, List, Dict
+from typing import Tuple, List, Dict, Optional
 import os
 import IBKR
 import Exante
-import POEMS
-import MoneyBase
 import logging
 import openpyxl
 import utils
+import flow_utils
+from config_loader import load_config, Config, PeriodsConfig
+from fee_calculator import (
+    FeeCalculator, 
+    PerformanceFeeCalculator,
+    annual_to_monthly_fee,
+    calculate_net_return
+)
+
+
+def get_period_windows(config: Optional[Config] = None) -> Dict[str, Tuple[str, str]]:
+    """
+    Get period windows for return calculations.
+    
+    Uses configuration if provided, otherwise uses defaults.
+    
+    Args:
+        config: Optional configuration object
+    
+    Returns:
+        Dictionary mapping period labels to (start_date, end_date) tuples
+    """
+    if config is not None:
+        return config.periods.get_period_windows()
+    
+    # Default periods if no config provided
+    return PeriodsConfig().get_period_windows()
 
 
 
@@ -26,21 +51,155 @@ Flow
 """
 
 
+class ReturnsCalculator:
+    """
+    GIPS-compliant returns calculator for multiple brokerage accounts.
+    
+    Replaces global state with a class-based approach for better maintainability.
+    Configuration is loaded from config.yaml.
+    """
+    
+    def __init__(self, config_path: str = 'config.yaml', input_path: Optional[str] = None):
+        """
+        Initialize the returns calculator.
+        
+        Args:
+            config_path: Path to configuration file
+            input_path: Override input path from config (optional)
+        """
+        self.config = load_config(config_path)
+        self.input_path = input_path or self.config.paths.input_dir
+        self.output_path = self.config.paths.output_dir
+        
+        # State
+        self.brokerages: Dict[str, Dict] = {}
+        self.all_results: Dict = {}
+        self.all_client_returns: List[Dict] = []
+        
+        # Load brokerage modules dynamically
+        self.brokerage_modules: Dict[str, tuple] = {}
+        self._load_brokerage_modules()
+    
+    def _load_brokerage_modules(self):
+        """Load brokerage modules based on configuration."""
+        import importlib
+        
+        for brokerage_config in self.config.get_enabled_brokerages():
+            try:
+                module = importlib.import_module(brokerage_config.module)
+                self.brokerage_modules[brokerage_config.name] = (
+                    getattr(module, 'process'),
+                    getattr(module, 'read_data')
+                )
+                self.brokerages[brokerage_config.name] = {}
+                logging.info(f"Loaded brokerage module: {brokerage_config.name}")
+            except (ImportError, AttributeError) as e:
+                logging.warning(f"Could not load brokerage module {brokerage_config.module}: {e}")
+    
+    def scan_for_accounts(self):
+        """Scan input directory for account CSV files."""
+        print('Scanning for accounts...')
+        
+        for brokerage_name in self.brokerages.keys():
+            brokerage_input_path = os.path.join(self.input_path, brokerage_name)
+            
+            if os.path.exists(brokerage_input_path):
+                for file in os.listdir(brokerage_input_path):
+                    if file.endswith('.csv'):
+                        client = os.path.splitext(file)[0]
+                        csv_path = os.path.join(brokerage_input_path, file)
+                        client_dir = os.path.join(brokerage_input_path, client)
+                        self.brokerages[brokerage_name][client] = {
+                            'source_csv': csv_path,
+                            'output_dir': client_dir
+                        }
+            
+            if len(self.brokerages[brokerage_name]):
+                print(f"Found {len(self.brokerages[brokerage_name])} {brokerage_name} accounts")
+    
+    def process_brokerage(self, broker_name: str):
+        """
+        Process all clients for a specific brokerage.
+        
+        Args:
+            broker_name: Name of the brokerage to process
+        """
+        if broker_name not in self.brokerage_modules:
+            logging.error(f"No module loaded for brokerage: {broker_name}")
+            return
+        
+        process_func, read_data_func = self.brokerage_modules[broker_name]
+        large_flow_threshold = self.config.thresholds.large_cash_flow_pct
+        
+        for client, files in self.brokerages[broker_name].items():
+            try:
+                print(f"Processing {broker_name} data for {client}...")
+                process_func(files['source_csv'])
+
+                # Processing logic
+                nav_df, trades_df = read_data_func(files['output_dir'])
+                sub_period_returns = calculate_sub_period_returns(
+                    nav_df, trades_df, 
+                    large_flow_threshold=large_flow_threshold
+                )
+                monthly_returns = calculate_monthly_twr(sub_period_returns)
+                # Build daily series directly from NAV and flows to mirror reference TWR
+                daily_returns = build_daily_returns_direct(nav_df, trades_df)
+                # Use daily-compounded TWR for totals to ensure no days are missed
+                absolute_return, annualized_return = calculate_total_returns_from_daily(daily_returns)
+
+                results = {
+                    'monthly_returns': monthly_returns,
+                    'daily_returns': daily_returns,
+                    'absolute_return': absolute_return,
+                    'annualized_return': annualized_return,
+                    'sub_period_returns': sub_period_returns,
+                    'account_name': f'{broker_name}_{client}'
+                }
+
+                self.all_results[f'{broker_name}_{client}'] = results
+                self.all_client_returns.append(results)
+                
+            except Exception as e:
+                logging.error(f"Error processing {broker_name} client {client}: {e}")
+                continue
+    
+    def process_all_brokerages(self):
+        """Process all enabled brokerages."""
+        for brokerage_name in self.brokerages.keys():
+            if self.brokerages[brokerage_name]:  # Only process if accounts found
+                self.process_brokerage(brokerage_name)
+    
+    def aggregate_returns(self):
+        """Aggregate client returns into composite."""
+        aggregate_client_returns(self.all_client_returns, self.all_results)
+    
+    def save_results(self):
+        """Save all results to output directory."""
+        save_all_results(self.all_results, self.output_path)
+    
+    def run(self):
+        """Run the full returns calculation pipeline."""
+        self.scan_for_accounts()
+        
+        total_accounts = sum(len(clients) for clients in self.brokerages.values())
+        if total_accounts == 0:
+            print("No accounts found to process")
+            return
+        
+        self.process_all_brokerages()
+        self.aggregate_returns()
+        self.save_results()
+        
+        print("Returns calculation process completed")
+
+
+# Legacy functions for backward compatibility
 def scan_for_accounts():
-    global brokerages
+    """Legacy function - use ReturnsCalculator class instead."""
+    global brokerages, args
     print('Scanning for accounts...')
     for brokerage in brokerages:
-        # POEMS and MoneyBase are manual brokerages with hard-coded data, so we just register the two
-        # known clients without looking for CSVs.
-        if brokerage in ['POEMS', 'MoneyBase']:
-            for client in ['Bernard', 'Roswitha']:
-                brokerages[brokerage][client] = {
-                    'source_csv': '',  # not used
-                    'output_dir': client  # just the client name, POEMS.read_data ignores parent dirs
-                }
-            print(f"Registered {brokerage} accounts: {', '.join(brokerages[brokerage].keys())}")
-            continue
-
         input_path = os.path.join(args.input_path, brokerage)
         if os.path.exists(input_path):
             for file in os.listdir(input_path):
@@ -57,7 +216,8 @@ def scan_for_accounts():
 
 
 def process_brokerage(broker_name, process, read_data):
-    global all_results, all_client_returns
+    """Legacy function - use ReturnsCalculator class instead."""
+    global all_results, all_client_returns, brokerages
 
     for client, files in brokerages[broker_name].items():
         try:
@@ -89,9 +249,23 @@ def process_brokerage(broker_name, process, read_data):
             continue
 
 
-def calculate_sub_period_returns(nav_df: pd.DataFrame, trades_df: pd.DataFrame) -> pd.DataFrame:
+def calculate_sub_period_returns(
+    nav_df: pd.DataFrame, 
+    trades_df: pd.DataFrame,
+    large_flow_threshold: float = 0.10
+) -> pd.DataFrame:
     """
-    Calculate sub-period returns between each cash flow using TWR methodology
+    Calculate sub-period returns between each cash flow using TWR methodology.
+    
+    Also flags large cash flows (>threshold of NAV) for GIPS compliance.
+    
+    Args:
+        nav_df: DataFrame with Date and Net Asset Value columns
+        trades_df: DataFrame with When and flow amount columns
+        large_flow_threshold: Threshold for flagging large flows (default 10%)
+    
+    Returns:
+        DataFrame with sub-period returns and large flow flags
     """
     logging.info("Calculating sub-period returns")
     
@@ -101,6 +275,20 @@ def calculate_sub_period_returns(nav_df: pd.DataFrame, trades_df: pd.DataFrame) 
     ]).sort_values().unique()
     
     logging.info(f"Found {len(all_dates)} unique dates for sub-period calculations")
+    
+    # Flag large cash flows using flow_utils
+    if not trades_df.empty:
+        trades_with_flags = flow_utils.flag_large_cash_flows(
+            trades_df, nav_df, 
+            threshold=large_flow_threshold,
+            date_column='When',
+            nav_date_column='Date',
+            nav_value_column='Net Asset Value'
+        )
+    else:
+        trades_with_flags = trades_df.copy()
+        if 'large_flow_flag' not in trades_with_flags.columns:
+            trades_with_flags['large_flow_flag'] = False
     
     returns = []
     for i in range(len(all_dates) - 1):
@@ -117,14 +305,21 @@ def calculate_sub_period_returns(nav_df: pd.DataFrame, trades_df: pd.DataFrame) 
         if start_nav <= 0:
             logging.warning(f"Invalid starting NAV ({start_nav}) for period {start_date}")
             continue
-            
-        period_flows = trades_df[
-            (trades_df['When'] > start_date) & 
-            (trades_df['When'] <= end_date)
-        ]
         
-        flow_column = 'Adjusted EUR' if 'Adjusted EUR' in period_flows.columns else 'EUR equivalent'
-        total_flow = period_flows[flow_column].sum()
+        # Get flows for period using flow_utils
+        period_flows = flow_utils.get_flows_for_period(
+            trades_with_flags, start_date, end_date, date_column='When'
+        )
+        
+        # Use flow_utils to get the total flow
+        total_flow = flow_utils.get_total_flow_for_period(
+            trades_df, start_date, end_date, date_column='When'
+        )
+        
+        # Check if period has large flows
+        has_large_flow = False
+        if not period_flows.empty and 'large_flow_flag' in period_flows.columns:
+            has_large_flow = period_flows['large_flow_flag'].any()
         
         sub_period_return = (end_nav - start_nav - total_flow) / start_nav if start_nav != 0 else 0
 
@@ -134,7 +329,8 @@ def calculate_sub_period_returns(nav_df: pd.DataFrame, trades_df: pd.DataFrame) 
             'return': sub_period_return,
             'start_nav': start_nav,
             'end_nav': end_nav,
-            'total_flow': total_flow
+            'total_flow': total_flow,
+            'has_large_flow': has_large_flow
         })
     
     returns_df = pd.DataFrame(returns)
@@ -152,77 +348,17 @@ def calculate_sub_period_returns(nav_df: pd.DataFrame, trades_df: pd.DataFrame) 
     if dropped_rows > 0:
         logging.info(f"Dropped {dropped_rows} invalid return records")
     
+    # Log large flow periods
+    if 'has_large_flow' in returns_df.columns:
+        large_flow_periods = returns_df[returns_df['has_large_flow'] == True]
+        if len(large_flow_periods) > 0:
+            logging.warning(
+                f"Found {len(large_flow_periods)} sub-periods with large cash flows "
+                f"(>{large_flow_threshold*100:.0f}% of NAV)"
+            )
+    
     logging.info(f"Calculated {len(returns_df)} sub-period returns")
     return returns_df
-
-
-def build_daily_returns(nav_df: pd.DataFrame, trades_df: pd.DataFrame, sub_period_returns: pd.DataFrame) -> pd.DataFrame:
-    """
-    Build a per-day series with TWR-consistent daily returns using sub-periods.
-    - For periods with consecutive daily NAVs, this yields actual daily returns.
-    - For sparse NAVs (e.g., monthly), returns are 0 on interim days and applied on the
-      end date of the sub-period.
-    The output has columns: date, return, start_nav, end_nav, flow
-    """
-    if sub_period_returns.empty:
-        return pd.DataFrame(columns=['date', 'return', 'start_nav', 'end_nav', 'flow'])
-
-    # Prepare flows per day
-    flow_col = 'Adjusted EUR' if 'Adjusted EUR' in trades_df.columns else 'EUR equivalent'
-    flows_by_day = (
-        trades_df.groupby(pd.to_datetime(trades_df['When']).dt.normalize())[flow_col]
-        .sum()
-        .to_dict()
-    )
-
-    # Ensure NAV dates are normalized and sorted
-    nav_df = nav_df.copy()
-    nav_df['Date'] = pd.to_datetime(nav_df['Date']).dt.normalize()
-    nav_df = nav_df.sort_values('Date')
-
-    daily_rows: List[Dict] = []
-
-    # Iterate each sub-period
-    for _, sp in sub_period_returns.iterrows():
-        period_start = pd.to_datetime(sp['start_date']).normalize()
-        period_end = pd.to_datetime(sp['end_date']).normalize()
-        r = float(sp['return']) if pd.notna(sp['return']) else 0.0
-
-        # Track baseline NAV for period return
-        period_start_nav = float(sp['start_nav']) if pd.notna(sp['start_nav']) else 0.0
-
-        # current_nav represents the NAV carried day-to-day through the period
-        current_nav = period_start_nav
-
-        # Iterate calendar days strictly after start up to and including end
-        for dt in pd.date_range(period_start + pd.Timedelta(days=1), period_end, freq='D'):
-            start_nav_today = current_nav
-            flow_today = float(flows_by_day.get(dt, 0.0))
-
-            if dt == period_end:
-                # Apply period return on the period baseline NAV, not on flows
-                return_today = r
-                return_impact = r * period_start_nav
-            else:
-                return_today = 0.0
-                return_impact = 0.0
-
-            end_nav_today = start_nav_today + flow_today + return_impact
-
-            daily_rows.append({
-                'date': dt,
-                'return': return_today,
-                'start_nav': start_nav_today,
-                'end_nav': end_nav_today,
-                'flow': flow_today,
-            })
-
-            current_nav = end_nav_today
-
-    daily_df = pd.DataFrame(daily_rows)
-    if not daily_df.empty:
-        daily_df = daily_df.sort_values('date')
-    return daily_df
 
 
 def build_daily_returns_direct(nav_df: pd.DataFrame, trades_df: pd.DataFrame) -> pd.DataFrame:
@@ -380,13 +516,22 @@ def calculate_total_returns_from_daily(daily_returns: pd.DataFrame) -> Tuple[flo
     return absolute_return, float(annualized_return)
 
 
-def aggregate_client_returns(client_returns: List[Dict]):
+def aggregate_client_returns(client_returns: List[Dict], results_dict: Optional[Dict] = None):
     """
     Aggregate returns across multiple accounts using daily sub-period series.
     - Build a composite daily series by summing start/end NAV and flows, then
       applying the sub-period return formula at the composite level.
     - Derive composite monthly returns by geometrically linking daily returns.
+    
+    Args:
+        client_returns: List of account result dictionaries
+        results_dict: Optional dict to store results (uses global all_results if None)
     """
+    global all_results
+    
+    # Use provided dict or fall back to global
+    target_results = results_dict if results_dict is not None else all_results
+    
     print("Aggregating client returns using daily composite method...")
 
     if not client_returns:
@@ -431,14 +576,10 @@ def aggregate_client_returns(client_returns: List[Dict]):
     composite_df_for_periods['composite_growth'] = (1 + composite_df_for_periods['composite_return']).cumprod() - 1
     composite_df_for_periods['date'] = pd.to_datetime(composite_df_for_periods['month'].astype(str))
 
-    # Reuse period window logic from build_gips_composite
+    # Use config-driven period windows
+    period_windows = get_period_windows()
     period_returns: Dict = {}
-    for label, (start_s, end_s) in {
-        '2022': ('2022-02-01', '2023-01-31'),
-        '2023': ('2023-02-01', '2024-01-31'),
-        '2024_ytd': ('2024-02-01', '2025-01-31'),
-        '2025_ytd': ('2025-02-01', '2026-01-31'),
-    }.items():
+    for label, (start_s, end_s) in period_windows.items():
         period_df = composite_df_for_periods[(composite_df_for_periods['date'] >= start_s) & (composite_df_for_periods['date'] <= end_s)]
         if not period_df.empty:
             ret = float((1 + period_df['composite_return']).prod() - 1)
@@ -468,7 +609,7 @@ def aggregate_client_returns(client_returns: List[Dict]):
     # Compute totals from daily to ensure exact TWR compounding
     abs_total, ann_total = calculate_total_returns_from_daily(composite_daily)
 
-    all_results['Combined'] = {
+    target_results['Combined'] = {
         'monthly_returns': composite_monthly,
         'daily_returns': composite_daily[['date', 'return', 'start_nav_total', 'end_nav_total', 'flow_total']].rename(columns={
             'start_nav_total': 'start_nav',
@@ -578,19 +719,32 @@ def build_gips_composite(monthly_returns_dfs: Dict[str, pd.DataFrame]) -> Tuple[
         for account, df in monthly_returns_dfs.items():
             month_data = df[df['month'] == month]
             if not month_data.empty:
-                nav = month_data['end_of_month_nav'].iloc[0]
                 monthly_return = month_data['return'].iloc[0]
                 
-                if np.isfinite(nav) and np.isfinite(monthly_return):
-                    month_navs[account] = nav
+                # Get start-of-month NAV for GIPS-compliant beginning-of-period weighting
+                som_nav = None
+                if 'start_of_month_nav' in month_data.columns:
+                    som = month_data['start_of_month_nav'].iloc[0]
+                    if np.isfinite(som) and som > 0:
+                        som_nav = som
+                
+                # Get end-of-month NAV for reporting
+                eom_nav = None
+                if 'end_of_month_nav' in month_data.columns:
+                    eom = month_data['end_of_month_nav'].iloc[0]
+                    if np.isfinite(eom):
+                        eom_nav = eom
+                
+                # Use start-of-month NAV for weighting (GIPS compliant)
+                # Fall back to end-of-month only if start not available
+                weighting_nav = som_nav if som_nav is not None else eom_nav
+                
+                if weighting_nav is not None and np.isfinite(monthly_return):
+                    start_month_navs[account] = som_nav if som_nav is not None else 0.0
+                    month_navs[account] = eom_nav if eom_nav is not None else 0.0
                     month_returns[account] = monthly_return
                     active_accounts.append(account)
 
-                    # Optional diagnostics: start-of-month NAV and monthly flow
-                    if 'start_of_month_nav' in month_data.columns:
-                        som = month_data['start_of_month_nav'].iloc[0]
-                        if np.isfinite(som):
-                            start_month_navs[account] = som
                     if 'monthly_flow' in month_data.columns:
                         flow_val = month_data['monthly_flow'].iloc[0]
                         try:
@@ -600,24 +754,29 @@ def build_gips_composite(monthly_returns_dfs: Dict[str, pd.DataFrame]) -> Tuple[
                         if np.isfinite(flow_num):
                             month_flows[account] = flow_num
         
-        if month_navs and month_returns:  # Only proceed if we have valid data
-            # Calculate total NAV for this month
-            total_nav = sum(month_navs.values())
-            # Optional aggregates for auditability
-            start_of_month_total_nav = sum(start_month_navs.values()) if start_month_navs else np.nan
+        if start_month_navs and month_returns:  # Only proceed if we have valid data
+            # Calculate total start-of-month NAV for GIPS-compliant weighting
+            total_start_nav = sum(start_month_navs.values())
+            total_end_nav = sum(month_navs.values()) if month_navs else np.nan
             monthly_flow_total = sum(month_flows.values()) if month_flows else np.nan
             
-            # Calculate NAV-weighted composite return for this month
-            weighted_return = sum(
-                (nav / total_nav) * month_returns[account]
-                for account, nav in month_navs.items()
-            )
+            # Calculate NAV-weighted composite return using BEGINNING-of-period weights
+            # This is GIPS compliant - weights are based on start-of-month NAV
+            if total_start_nav > 0:
+                weighted_return = sum(
+                    (start_month_navs[account] / total_start_nav) * month_returns[account]
+                    for account in month_returns.keys()
+                    if account in start_month_navs and start_month_navs[account] > 0
+                )
+            else:
+                # Fallback to equal weighting if no start NAVs available
+                weighted_return = np.mean(list(month_returns.values()))
             
             composite_results.append({
                 'month': month,
                 'composite_return': weighted_return,
-                'total_nav': total_nav,
-                'start_of_month_total_nav': start_of_month_total_nav,
+                'total_nav': total_end_nav,  # End-of-month NAV for reporting
+                'start_of_month_total_nav': total_start_nav,  # Used for weighting
                 'monthly_flow_total': monthly_flow_total,
                 'active_accounts': ','.join(active_accounts)
             })
@@ -634,66 +793,110 @@ def build_gips_composite(monthly_returns_dfs: Dict[str, pd.DataFrame]) -> Tuple[
     # Add period returns calculations
     composite_df['date'] = pd.to_datetime(composite_df['month'].astype(str))
     
-    # Calculate returns for specific periods
+    # Calculate returns for specific periods using config-driven period windows
     period_returns = {}
+    period_windows = get_period_windows()
     
-    # 2022 returns (2nd Feb 2022 - 31st Jan 2023)
-    period_2022 = composite_df[
-        (composite_df['date'] >= '2022-02-01') & 
-        (composite_df['date'] <= '2023-01-31')
-    ]
-    if not period_2022.empty:
-        # Compound the monthly returns for the period
-        period_2022_return = np.prod(1 + period_2022['composite_return']) - 1
-        period_returns['2022'] = {
-            'return': period_2022_return,
-            'accounts': list(set(','.join(period_2022['active_accounts']).split(',')))
-        }
-        logging.info(f"2022 returns calculated using accounts: {period_returns['2022']['accounts']}")
-    
-    # 2023 returns (2nd Feb 2023 - 31st Jan 2024)
-    period_2023 = composite_df[
-        (composite_df['date'] >= '2023-02-01') & 
-        (composite_df['date'] <= '2024-01-31')
-    ]
-    if not period_2023.empty:
-        # Compound the monthly returns for the period
-        period_2023_return = np.prod(1 + period_2023['composite_return']) - 1
-        period_returns['2023'] = {
-            'return': period_2023_return,
-            'accounts': list(set(','.join(period_2023['active_accounts']).split(',')))
-        }
-        logging.info(f"2023 returns calculated using accounts: {period_returns['2023']['accounts']}")
-    
-    # 2024 returns (2nd Feb 2024 - 31st Jan 2025)
-    period_2024 = composite_df[
-        (composite_df['date'] >= '2024-02-01') & 
-        (composite_df['date'] <= '2025-01-31')
-    ]
-    if not period_2024.empty:
-        # Compound the monthly returns for the period
-        period_2024_return = np.prod(1 + period_2024['composite_return']) - 1
-        period_returns['2024_ytd'] = {
-            'return': period_2024_return,
-            'accounts': list(set(','.join(period_2024['active_accounts']).split(',')))
-        }
-        logging.info(f"2024 YTD returns calculated using accounts: {period_returns['2024_ytd']['accounts']}")
-    
-    # 2025 returns (2nd Feb 2025 - 31st Jan 2026)
-    period_2025 = composite_df[
-        (composite_df['date'] >= '2025-02-01') & 
-        (composite_df['date'] <= '2026-01-31')
-    ]
-    if not period_2025.empty:
-        # Compound the monthly returns for the period
-        period_2025_return = np.prod(1 + period_2025['composite_return']) - 1
-        period_returns['2025_ytd'] = {
-            'return': period_2025_return,
-            'accounts': list(set(','.join(period_2025['active_accounts']).split(',')))
-        }
-        logging.info(f"2025 YTD returns calculated using accounts: {period_returns['2025_ytd']['accounts']}")
+    for period_label, (start_date, end_date) in period_windows.items():
+        period_df = composite_df[
+            (composite_df['date'] >= start_date) & 
+            (composite_df['date'] <= end_date)
+        ]
+        if not period_df.empty:
+            # Compound the monthly returns for the period
+            period_return = np.prod(1 + period_df['composite_return']) - 1
+            period_returns[period_label] = {
+                'return': period_return,
+                'accounts': list(set(','.join(period_df['active_accounts']).split(',')))
+            }
+            logging.info(f"{period_label} returns calculated using accounts: {period_returns[period_label]['accounts']}")
     logging.info(f"Calculated composite returns for {len(composite_df)} months")
     return composite_df, period_returns
+
+
+def calculate_internal_dispersion(
+    account_returns: Dict[str, float],
+    account_navs: Optional[Dict[str, float]] = None,
+    min_accounts: int = 6
+) -> Optional[float]:
+    """
+    Calculate internal dispersion of account returns for GIPS compliance.
+    
+    Internal dispersion measures how individual account returns vary from the composite.
+    GIPS requires this for composites with 6 or more accounts.
+    
+    This implementation uses equal-weighted standard deviation.
+    For asset-weighted dispersion, provide account_navs.
+    
+    Args:
+        account_returns: Dictionary mapping account names to their returns
+        account_navs: Optional dictionary mapping account names to NAV for weighting
+        min_accounts: Minimum number of accounts required (default 6 for GIPS)
+    
+    Returns:
+        Standard deviation of returns, or None if fewer than min_accounts
+    """
+    if len(account_returns) < min_accounts:
+        logging.info(
+            f"Skipping dispersion calculation: {len(account_returns)} accounts "
+            f"(minimum {min_accounts} required for GIPS)"
+        )
+        return None
+    
+    returns = np.array(list(account_returns.values()))
+    
+    if account_navs is not None and len(account_navs) == len(account_returns):
+        # Asset-weighted standard deviation
+        navs = np.array([account_navs.get(acc, 0) for acc in account_returns.keys()])
+        total_nav = navs.sum()
+        if total_nav > 0:
+            weights = navs / total_nav
+            weighted_mean = np.sum(weights * returns)
+            variance = np.sum(weights * (returns - weighted_mean) ** 2)
+            return float(np.sqrt(variance))
+    
+    # Equal-weighted standard deviation (sample std dev with ddof=1)
+    return float(np.std(returns, ddof=1))
+
+
+def calculate_composite_dispersion(
+    monthly_returns_dfs: Dict[str, pd.DataFrame],
+    period_start: str,
+    period_end: str,
+    min_accounts: int = 6
+) -> Optional[float]:
+    """
+    Calculate internal dispersion for a specific period.
+    
+    Args:
+        monthly_returns_dfs: Dictionary of account monthly returns DataFrames
+        period_start: Start date of period (YYYY-MM-DD)
+        period_end: End date of period (YYYY-MM-DD)
+        min_accounts: Minimum accounts required
+    
+    Returns:
+        Internal dispersion for the period, or None if not enough accounts
+    """
+    period_returns = {}
+    period_navs = {}
+    
+    for account, df in monthly_returns_dfs.items():
+        df = df.copy()
+        df['date'] = pd.to_datetime(df['month'].astype(str))
+        period_df = df[(df['date'] >= period_start) & (df['date'] <= period_end)]
+        
+        if not period_df.empty:
+            # Calculate compound return for the period
+            account_return = float((1 + period_df['return']).prod() - 1)
+            period_returns[account] = account_return
+            
+            # Get average NAV for weighting
+            if 'start_of_month_nav' in period_df.columns:
+                avg_nav = period_df['start_of_month_nav'].mean()
+                if np.isfinite(avg_nav):
+                    period_navs[account] = avg_nav
+    
+    return calculate_internal_dispersion(period_returns, period_navs, min_accounts)
 
 
 def build_synthetic_composite(nav_dfs: Dict[str, pd.DataFrame], flow_dfs: Dict[str, pd.DataFrame]) -> pd.DataFrame:
@@ -775,13 +978,39 @@ def build_account_daily_from_nav_flows(nav_df: pd.DataFrame, flow_df: pd.DataFra
 
 
 
-def save_all_results(results: Dict, output_dir: str = 'results') -> None:
+def save_all_results(results: Dict, output_dir: str = 'results', config: Optional[Config] = None) -> None:
     """
-    Save results for all accounts and aggregations
+    Save results for all accounts and aggregations.
+    
+    Includes gross and net returns with fee breakdown.
+    
+    Args:
+        results: Dictionary of results to save
+        output_dir: Output directory path
+        config: Optional configuration (uses defaults if not provided)
     """
     logging.info(f"Saving results to {output_dir}")
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     os.makedirs(output_dir, exist_ok=True)
+    
+    # Load fee configuration
+    if config is None:
+        try:
+            config = load_config()
+        except Exception:
+            config = None
+    
+    # Get fee rates from config or use defaults
+    if config is not None:
+        annual_mgmt_fee = config.fees.management_fee_annual
+        perf_fee_rate = config.fees.performance_fee_rate
+        hurdle_rate = config.fees.hurdle_rate_annual
+    else:
+        annual_mgmt_fee = 0.01  # 1% default
+        perf_fee_rate = 0.25   # 25% default
+        hurdle_rate = 0.06     # 6% default
+    
+    monthly_mgmt_fee = annual_to_monthly_fee(annual_mgmt_fee)
     
     for category, data in results.items():
         category_dir = os.path.join(output_dir, category)
@@ -809,10 +1038,28 @@ def save_all_results(results: Dict, output_dir: str = 'results') -> None:
             monthly_returns = pd.DataFrame(monthly_rows)
         else:
             monthly_returns = pd.DataFrame(columns=['month', 'return', 'start_of_month_nav', 'end_of_month_nav', 'monthly_flow', 'nav'])
-
-        # Format monthly returns as percentages
-        if 'return' in monthly_returns.columns:
-            monthly_returns['return'] = monthly_returns['return'].map('{:.4%}'.format)
+        
+        # Calculate gross and net returns with fee breakdown
+        if 'return' in monthly_returns.columns and not monthly_returns.empty:
+            # Store raw numeric returns for calculations
+            raw_returns = monthly_returns['return'].copy()
+            
+            # Gross return is the original return
+            monthly_returns['gross_return'] = raw_returns
+            
+            # Management fee (monthly)
+            monthly_returns['management_fee'] = monthly_mgmt_fee
+            
+            # Net return = Gross - Management fee
+            monthly_returns['net_return'] = raw_returns - monthly_mgmt_fee
+            
+            # Format for display
+            monthly_returns['gross_return'] = monthly_returns['gross_return'].map('{:.4%}'.format)
+            monthly_returns['management_fee'] = monthly_returns['management_fee'].map('{:.4%}'.format)
+            monthly_returns['net_return'] = monthly_returns['net_return'].map('{:.4%}'.format)
+            
+            # Keep original return column for compatibility
+            monthly_returns['return'] = monthly_returns['gross_return']
         
         # Format NAV/flow columns as currency if they exist
         if 'nav' in monthly_returns.columns:
@@ -867,34 +1114,117 @@ def save_all_results(results: Dict, output_dir: str = 'results') -> None:
         # Create summary DataFrame with all return metrics based on daily compounding
         summary_data = []
         
-        # Add blank row for spacing
-        summary_data.append({'Metric': '', 'Value': ''})
+        # Calculate gross and net total returns
+        gross_absolute = data.get("absolute_return", 0.0)
+        gross_annualized = data.get("annualized_return", 0.0)
         
-        # Add TWR returns (from daily compounding if available)
+        # Calculate net returns (after management fees)
+        # For multi-year periods, compound the monthly fee
+        if 'daily_returns' in data and isinstance(data['daily_returns'], pd.DataFrame):
+            num_months = len(data['daily_returns']['date'].dt.to_period('M').unique()) if 'date' in data['daily_returns'].columns else 12
+        else:
+            num_months = 12  # Default assumption
+        
+        total_mgmt_fee_impact = (1 + monthly_mgmt_fee) ** num_months - 1
+        net_absolute = gross_absolute - total_mgmt_fee_impact
+        
+        # Calculate annualized net return
+        if gross_annualized != 0:
+            net_annualized = gross_annualized - annual_mgmt_fee
+        else:
+            net_annualized = 0.0
+        
+        # Add section header
+        summary_data.append({'Metric': '=== GROSS RETURNS (Before Fees) ===', 'Value': ''})
+        
         summary_data.extend([
             {
-                'Metric': 'Total Absolute Return (TWR)',
-                'Value': f'{data.get("absolute_return", 0.0):.4%}'
+                'Metric': 'Total Absolute Return (Gross TWR)',
+                'Value': f'{gross_absolute:.4%}'
             },
             {
-                'Metric': 'Annualized Return (TWR)',
-                'Value': f'{data.get("annualized_return", 0.0):.4%}'
+                'Metric': 'Annualized Return (Gross TWR)',
+                'Value': f'{gross_annualized:.4%}'
             }
         ])
         
         # Add blank row for spacing
         summary_data.append({'Metric': '', 'Value': ''})
+        summary_data.append({'Metric': '=== NET RETURNS (After Fees) ===', 'Value': ''})
         
-
+        summary_data.extend([
+            {
+                'Metric': 'Total Absolute Return (Net TWR)',
+                'Value': f'{net_absolute:.4%}'
+            },
+            {
+                'Metric': 'Annualized Return (Net TWR)',
+                'Value': f'{net_annualized:.4%}'
+            }
+        ])
+        
+        # Add fee structure section
+        summary_data.append({'Metric': '', 'Value': ''})
+        summary_data.append({'Metric': '=== FEE STRUCTURE ===', 'Value': ''})
+        summary_data.extend([
+            {
+                'Metric': 'Annual Management Fee',
+                'Value': f'{annual_mgmt_fee:.2%}'
+            },
+            {
+                'Metric': 'Monthly Management Fee (equivalent)',
+                'Value': f'{monthly_mgmt_fee:.4%}'
+            },
+            {
+                'Metric': 'Performance Fee Rate',
+                'Value': f'{perf_fee_rate:.0%} of gains above hurdle'
+            },
+            {
+                'Metric': 'Hurdle Rate (Annual)',
+                'Value': f'{hurdle_rate:.2%}'
+            },
+            {
+                'Metric': 'Hurdle Mechanism',
+                'Value': 'Carry-forward shortfall (non-compounding)'
+            }
+        ])
+        
+        # Add blank row for spacing
+        summary_data.append({'Metric': '', 'Value': ''})
+        summary_data.append({'Metric': '=== PERIOD RETURNS ===', 'Value': ''})
         
         # Add period returns if they exist
         if 'period_returns' in data:
+            # Create performance fee calculator for period returns
+            perf_calc = PerformanceFeeCalculator(hurdle_rate=hurdle_rate, fee_rate=perf_fee_rate)
+            
             for period, period_data in data['period_returns'].items():
-                period_name = '2024 Returns (YTD)' if period == '2024_ytd' else f'{period} Returns'
+                period_name = f'{period} Returns' if '_ytd' not in period else f'{period.replace("_ytd", "")} Returns (YTD)'
+                gross_period_return = period_data["return"]
+                
+                # Net period return (after management fee, ~1% annual)
+                net_period_return = gross_period_return - annual_mgmt_fee
+                
+                # Calculate performance fee for this period
+                perf_fee, shortfall = perf_calc.calculate_annual_fee(net_period_return)
+                final_net_return = net_period_return - perf_fee
+                
                 summary_data.extend([
                     {
-                        'Metric': f'{period_name} (TWR)',
-                        'Value': f'{period_data["return"]:.4%}'
+                        'Metric': f'{period_name} (Gross TWR)',
+                        'Value': f'{gross_period_return:.4%}'
+                    },
+                    {
+                        'Metric': f'{period_name} (Net TWR)',
+                        'Value': f'{final_net_return:.4%}'
+                    },
+                    {
+                        'Metric': f'{period_name} Performance Fee',
+                        'Value': f'{perf_fee:.4%}' if perf_fee > 0 else 'None (below hurdle)'
+                    },
+                    {
+                        'Metric': f'{period_name} Carried Shortfall',
+                        'Value': f'{shortfall:.4%}' if shortfall > 0 else 'None'
                     },
                     {
                         'Metric': f'{period_name} Active Accounts',
@@ -927,16 +1257,24 @@ def save_all_results(results: Dict, output_dir: str = 'results') -> None:
 
 
 def main():
+    """
+    Main entry point using legacy global variables.
+    For new code, use ReturnsCalculator class directly.
+    """
+    global brokerages, functions, all_results, all_client_returns, args
+    
     utils.setup_logging('Returns')
 
     scan_for_accounts()
 
-    if not brokerages:
+    total_accounts = sum(len(clients) for clients in brokerages.values())
+    if total_accounts == 0:
         print("No accounts found to process")
         return
 
     for account in brokerages:
-        process_brokerage(account, *functions[account])
+        if account in functions and brokerages[account]:
+            process_brokerage(account, *functions[account])
 
     # Calculate aggregate results using asset-weighted composite returns
     aggregate_client_returns(all_client_returns)
@@ -946,25 +1284,46 @@ def main():
     print("Returns calculation process completed")
 
 
+def main_with_class(config_path: str = 'config.yaml', input_path: Optional[str] = None):
+    """
+    Main entry point using the ReturnsCalculator class.
+    
+    Args:
+        config_path: Path to configuration file
+        input_path: Override input path from config
+    """
+    utils.setup_logging('Returns')
+    
+    calculator = ReturnsCalculator(config_path=config_path, input_path=input_path)
+    calculator.run()
+
+
 if __name__ == "__main__":
-    # Dictionary that holds the accounts for each brokerage
-    brokerages = {'Exante': {}, 'IBKR': {}, 'POEMS': {}, 'MoneyBase': {}}
-
-    # Functions used by process_brokerage() for each brokerage
-    functions = {
-        "IBKR": (IBKR.process, IBKR.read_data),
-        "Exante": (Exante.process, Exante.read_data),
-        "POEMS": (POEMS.process, POEMS.read_data),
-        "MoneyBase": (MoneyBase.process, MoneyBase.read_data),
-    }
-
-    # Data structures storing results
-    all_results = {}
-    all_client_returns = []
-
     # Argument configuration
-    parser = argparse.ArgumentParser(description='A Python-based tool for calculating investment returns across multiple brokerage accounts for Bilbel Capital.')
-    parser.add_argument('-i', '--input-path', default='input', help='Input path')
+    parser = argparse.ArgumentParser(
+        description='GIPS-compliant investment returns calculator for multiple brokerage accounts.'
+    )
+    parser.add_argument('-i', '--input-path', default=None, help='Input path (overrides config)')
+    parser.add_argument('-c', '--config', default='config.yaml', help='Configuration file path')
+    parser.add_argument('--legacy', action='store_true', help='Use legacy mode with global variables')
     args = parser.parse_args()
 
-    main()
+    if args.legacy:
+        # Legacy mode for backward compatibility
+        # Initialize global variables
+        brokerages = {'Exante': {}, 'IBKR': {}}
+        functions = {
+            "IBKR": (IBKR.process, IBKR.read_data),
+            "Exante": (Exante.process, Exante.read_data),
+        }
+        all_results = {}
+        all_client_returns = []
+        
+        # Override input path if provided
+        if args.input_path is None:
+            args.input_path = 'input'
+        
+        main()
+    else:
+        # New class-based mode (default)
+        main_with_class(config_path=args.config, input_path=args.input_path)

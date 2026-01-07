@@ -1,3 +1,4 @@
+# Core dependencies
 et_xmlfile==2.0.0
 numpy==2.0.2
 openpyxl==3.1.5
@@ -7,6 +8,9 @@ pytz==2024.2
 six==1.17.0
 tzdata==2024.2
 numpy_financial==1.0.0
+PyYAML==6.0.1
+
+# Testing dependencies
 pytest==8.2.1
 pytest-cov==5.0.0
 pytest-xdist==3.5.0

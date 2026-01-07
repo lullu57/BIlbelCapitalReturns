@@ -3,3 +3,28 @@ results/*
 __pycache__/*
 .DS_Store
 logs/*
+
+# Configuration with sensitive data
+config.yaml
+
+# Keep the example config
+!config.example.yaml
+
+# Virtual environment
+venv/
+.venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Coverage reports
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Hypothesis test database
+.hypothesis/
