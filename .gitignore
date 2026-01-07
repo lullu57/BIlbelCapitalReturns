@@ -28,3 +28,6 @@ htmlcov/
 
 # Hypothesis test database
 .hypothesis/
+
+*/__pycache__/*
+*.pyc
