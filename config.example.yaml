@@ -26,8 +26,9 @@ clients: []
 # Fee structure
 # Update these values to match your fee agreement
 fees:
-  # Annual management fee as decimal (1% = 0.01)
-  management_fee_annual: 0.01
+  # Management fee: 0.25% of start NAV per quarter (1% annual equivalent)
+  # Charged at the start of each quarter on opening NAV
+  management_fee_quarterly: 0.0025  # 0.25% per quarter
   
   # Performance fee rate as decimal (25% = 0.25)
   # Applied to gains above the hurdle rate

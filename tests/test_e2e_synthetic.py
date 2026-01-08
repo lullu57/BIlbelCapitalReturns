@@ -475,6 +475,72 @@ class TestEndToEndCompositeAggregation:
         
         return accounts
     
+    @pytest.fixture
+    def accounts_with_different_start_dates(self):
+        """Create accounts with different start dates (staggered onboarding)."""
+        # Full year account (Jan-Dec 2024)
+        full_year_months = pd.period_range('2024-01', periods=12, freq='M')
+        
+        # Late start account (Jul-Dec 2024 only - 6 months)
+        late_start_months = pd.period_range('2024-07', periods=6, freq='M')
+        
+        accounts = {
+            'full_year_client': pd.DataFrame({
+                'month': full_year_months,
+                'return': [0.01, 0.02, -0.01, 0.03, 0.01, 0.02,
+                          0.01, 0.015, 0.02, 0.01, 0.025, 0.01],
+                'start_of_month_nav': [100000 * (1.01 ** i) for i in range(12)],
+            }),
+            'late_start_client': pd.DataFrame({
+                'month': late_start_months,
+                'return': [0.02, 0.025, 0.015, 0.03, 0.02, 0.015],
+                'start_of_month_nav': [50000 * (1.02 ** i) for i in range(6)],
+            }),
+        }
+        
+        return accounts
+    
+    def test_composite_with_staggered_account_starts(self, accounts_with_different_start_dates):
+        """Test composite handles accounts joining at different times."""
+        composite_df, stats = twr.build_gips_composite(accounts_with_different_start_dates)
+        
+        # Should have 12 months total
+        assert len(composite_df) == 12
+        
+        # Check active accounts for different periods
+        jan_data = composite_df[composite_df['month'] == pd.Period('2024-01')]
+        jul_data = composite_df[composite_df['month'] == pd.Period('2024-07')]
+        
+        # January should only have full_year_client
+        jan_active = jan_data['active_accounts'].iloc[0]
+        assert 'full_year_client' in jan_active
+        assert 'late_start_client' not in jan_active
+        
+        # July should have both clients
+        jul_active = jul_data['active_accounts'].iloc[0]
+        assert 'full_year_client' in jul_active
+        assert 'late_start_client' in jul_active
+    
+    def test_composite_weighting_changes_with_new_accounts(self, accounts_with_different_start_dates):
+        """Test that composite weighting adjusts when accounts join."""
+        composite_df, stats = twr.build_gips_composite(accounts_with_different_start_dates)
+        
+        # In January, composite return should equal full_year_client return (only account)
+        jan_composite = composite_df[composite_df['month'] == pd.Period('2024-01')]['composite_return'].iloc[0]
+        jan_full_year = 0.01  # From fixture
+        assert jan_composite == pytest.approx(jan_full_year, abs=0.001)
+        
+        # In July, composite should be weighted average of both accounts
+        # full_year_client NAV after 6 months: 100000 * 1.01^6 ≈ 106152
+        # late_start_client NAV at start: 50000
+        # Weights: 106152/(106152+50000) ≈ 0.68, 50000/156152 ≈ 0.32
+        jul_composite = composite_df[composite_df['month'] == pd.Period('2024-07')]['composite_return'].iloc[0]
+        
+        # Verify it's between the two returns (weighted average)
+        jul_full_year = 0.01  # From fixture
+        jul_late_start = 0.02  # From fixture
+        assert min(jul_full_year, jul_late_start) <= jul_composite <= max(jul_full_year, jul_late_start)
+    
     def test_composite_calculation(self, multiple_accounts):
         """Test GIPS composite calculation with multiple accounts."""
         composite_df, stats = twr.build_gips_composite(multiple_accounts)

@@ -23,9 +23,16 @@ class BrokerageConfig:
 @dataclass
 class FeeConfig:
     """Fee structure configuration."""
-    management_fee_annual: float = 0.01  # 1% annual
+    management_fee_quarterly: float = 0.0025  # 0.25% per quarter (1% annual)
     performance_fee_rate: float = 0.25   # 25% of gains above hurdle
     hurdle_rate_annual: float = 0.06     # 6% annual hurdle
+    # Keep annual for backward compatibility
+    management_fee_annual: float = 0.01  # 1% annual (derived from quarterly)
+    
+    def __post_init__(self):
+        # Derive annual from quarterly if not explicitly set
+        if self.management_fee_quarterly > 0:
+            self.management_fee_annual = self.management_fee_quarterly * 4
     
     @property
     def management_fee_monthly(self) -> float:
