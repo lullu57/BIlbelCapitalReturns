@@ -237,22 +237,22 @@ Contains comprehensive metrics:
 ## Example Output
 
 ```
-Total Absolute Return (Gross TWR): 1980.81%
-Total Absolute Return (Net TWR): 1101.67%
-Annualized Return (Gross TWR): 138.42%
-Annualized Return (Net TWR): 103.47%
+Total Absolute Return (Gross TWR): 150.25%
+Total Absolute Return (Net TWR): 112.40%
+Annualized Return (Gross TWR): 25.10%
+Annualized Return (Net TWR): 20.35%
 
-Initial NAV (Actual): €7,809.27
-Final NAV - Gross: €1,496,663.75
-Final NAV - Net: €1,218,909.74
-Total Flows: €404,361.50
-Total Fees: €277,754.01 (Mgmt: €9,752 + Perf: €268,002)
-Fee Impact: €277,754.01
+Initial NAV (Actual): €100,000.00
+Final NAV - Gross: €285,450.50
+Final NAV - Net: €248,330.25
+Total Flows: €25,000.00
+Total Fees: €37,120.25 (Mgmt: €4,120 + Perf: €33,000)
+Fee Impact: €37,120.25
 
-2022 Returns (Fiscal Feb-Jan): Gross 183.25% → Net 138.10%
-2023 Returns (Fiscal Feb-Jan): Gross 89.17% → Net 67.38%
-2024 Returns (Fiscal Feb-Jan): Gross 142.13% → Net 107.10%
-2025 Returns (Fiscal YTD): Gross 61.91% → Net 47.43%
+2022 Returns (Fiscal Feb-Jan): Gross 22.50% → Net 18.15%
+2023 Returns (Fiscal Feb-Jan): Gross 15.10% → Net 12.30%
+2024 Returns (Fiscal Feb-Jan): Gross 35.40% → Net 28.90%
+2025 Returns (Fiscal YTD): Gross 12.20% → Net 9.80%
 ```
 
 ## GIPS Compliance Features
