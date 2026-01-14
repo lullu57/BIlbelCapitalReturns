@@ -163,6 +163,26 @@ The system processes broker files in three main steps:
 - **Timing**: Deducted at end of each fiscal quarter
 - **Base**: Investment gain since year start (excluding flows)
 - **Carry-forward**: Shortfall carries to next year (non-compounding)
+- **No Double-Counting**: Only charges on *incremental* excess each quarter
+
+**Double-Counting Prevention Example:**
+```
+Year Start NAV: €100,000
+
+Q1: NAV = €110,000 (10% gain)
+    Hurdle = 1.5% = €1,500
+    Excess = €10,000 - €1,500 = €8,500
+    Fee = €8,500 × 25% = €2,125 ✓
+
+Q2: NAV = €113,000 (13% total gain)
+    Hurdle = 3% = €3,000
+    Total Excess = €13,000 - €3,000 = €10,000
+    Already Charged = €8,500
+    NEW Excess = €10,000 - €8,500 = €1,500
+    Fee = €1,500 × 25% = €375 ✓
+
+Without this fix, Q2 would incorrectly charge €10,000 × 25% = €2,500
+```
 
 ### 4. NAV Tracking
 
@@ -217,22 +237,22 @@ Contains comprehensive metrics:
 ## Example Output
 
 ```
-Total Absolute Return (Gross TWR): 2037.52%
-Total Absolute Return (Net TWR): 1130.88%
-Annualized Return (Gross TWR): 140.26%
-Annualized Return (Net TWR): 104.88%
+Total Absolute Return (Gross TWR): 1980.81%
+Total Absolute Return (Net TWR): 1101.67%
+Annualized Return (Gross TWR): 138.42%
+Annualized Return (Net TWR): 103.47%
 
 Initial NAV (Actual): €7,809.27
 Final NAV - Gross: €1,496,663.75
-Final NAV - Net: €1,036,211.72
+Final NAV - Net: €1,218,909.74
 Total Flows: €404,361.50
-Total Fees: €460,452.04 (Mgmt: €8,239 + Perf: €452,213)
-Fee Impact: €460,452.04
+Total Fees: €277,754.01 (Mgmt: €9,752 + Perf: €268,002)
+Fee Impact: €277,754.01
 
-2022 Returns: Gross 188.24% → Net 141.68%
-2023 Returns: Gross 89.17% → Net 67.38%
-2024 Returns: Gross 142.13% → Net 107.09%
-2025 Returns: Gross 61.91% → Net 46.93%
+2022 Returns (Fiscal Feb-Jan): Gross 183.25% → Net 138.10%
+2023 Returns (Fiscal Feb-Jan): Gross 89.17% → Net 67.38%
+2024 Returns (Fiscal Feb-Jan): Gross 142.13% → Net 107.10%
+2025 Returns (Fiscal YTD): Gross 61.91% → Net 47.43%
 ```
 
 ## GIPS Compliance Features

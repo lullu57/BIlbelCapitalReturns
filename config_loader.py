@@ -23,21 +23,31 @@ class BrokerageConfig:
 @dataclass
 class FeeConfig:
     """Fee structure configuration."""
-    management_fee_quarterly: float = 0.0025  # 0.25% per quarter (1% annual)
+    management_fee_quarterly: Optional[float] = 0.0025  # 0.25% per quarter (1% annual)
     performance_fee_rate: float = 0.25   # 25% of gains above hurdle
     hurdle_rate_annual: float = 0.06     # 6% annual hurdle
-    # Keep annual for backward compatibility
-    management_fee_annual: float = 0.01  # 1% annual (derived from quarterly)
+    # Annual fee is derived from quarterly for reporting (fees are crystallized quarterly).
+    management_fee_annual: Optional[float] = None
     
     def __post_init__(self):
-        # Derive annual from quarterly if not explicitly set
-        if self.management_fee_quarterly > 0:
-            self.management_fee_annual = self.management_fee_quarterly * 4
+        if self.management_fee_quarterly is None and self.management_fee_annual is None:
+            self.management_fee_quarterly = 0.0025
+        if self.management_fee_quarterly is None and self.management_fee_annual is not None:
+            self.management_fee_quarterly = self.management_fee_annual / 4
+        if self.management_fee_quarterly is not None:
+            derived_annual = self.management_fee_quarterly * 4
+            if self.management_fee_annual is None or abs(self.management_fee_annual - derived_annual) > 1e-9:
+                self.management_fee_annual = derived_annual
     
     @property
     def management_fee_monthly(self) -> float:
         """Convert annual fee to monthly equivalent: (1 + r)^(1/12) - 1"""
         return (1 + self.management_fee_annual) ** (1/12) - 1
+    
+    @property
+    def hurdle_rate_quarterly(self) -> float:
+        """Quarterly hurdle rate (annual / 4)."""
+        return self.hurdle_rate_annual / 4
 
 
 @dataclass
@@ -182,7 +192,8 @@ def _parse_config(raw: dict) -> Config:
     # Parse fees
     fees_raw = raw.get('fees', {})
     fees = FeeConfig(
-        management_fee_annual=fees_raw.get('management_fee_annual', 0.01),
+        management_fee_quarterly=fees_raw.get('management_fee_quarterly'),
+        management_fee_annual=fees_raw.get('management_fee_annual'),
         performance_fee_rate=fees_raw.get('performance_fee_rate', 0.25),
         hurdle_rate_annual=fees_raw.get('hurdle_rate_annual', 0.06),
     )
@@ -240,6 +251,16 @@ def validate_config(config: Config) -> List[str]:
     # Validate fees
     if config.fees.management_fee_annual < 0 or config.fees.management_fee_annual > 0.10:
         issues.append(f"Management fee {config.fees.management_fee_annual} seems unusual (expected 0-10%)")
+    if config.fees.management_fee_quarterly is not None:
+        if config.fees.management_fee_quarterly < 0 or config.fees.management_fee_quarterly > 0.05:
+            issues.append(
+                f"Quarterly management fee {config.fees.management_fee_quarterly} seems unusual (expected 0-5%)"
+            )
+        derived_annual = config.fees.management_fee_quarterly * 4
+        if abs(config.fees.management_fee_annual - derived_annual) > 1e-6:
+            issues.append(
+                "Management fee annual does not match quarterly * 4; annual is derived from quarterly for reporting"
+            )
     
     if config.fees.performance_fee_rate < 0 or config.fees.performance_fee_rate > 0.50:
         issues.append(f"Performance fee rate {config.fees.performance_fee_rate} seems unusual (expected 0-50%)")
@@ -263,4 +284,3 @@ def validate_config(config: Config) -> List[str]:
             issues.append(f"Brokerage {b.name} missing module")
     
     return issues
-

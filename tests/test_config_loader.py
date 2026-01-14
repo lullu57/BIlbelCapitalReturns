@@ -30,13 +30,15 @@ class TestFeeConfig:
     def test_default_values(self):
         """Test default fee configuration values."""
         fee_config = FeeConfig()
+        assert fee_config.management_fee_quarterly == 0.0025
         assert fee_config.management_fee_annual == 0.01
         assert fee_config.performance_fee_rate == 0.25
         assert fee_config.hurdle_rate_annual == 0.06
     
     def test_monthly_fee_conversion(self):
         """Test annual to monthly fee conversion."""
-        fee_config = FeeConfig(management_fee_annual=0.12)  # 12% annual
+        # Set both quarterly and annual to ensure consistent test
+        fee_config = FeeConfig(management_fee_quarterly=0.03, management_fee_annual=0.12)  # 12% annual
         monthly = fee_config.management_fee_monthly
         # Monthly should be approximately 0.12/12 but geometric
         assert monthly > 0
@@ -158,6 +160,7 @@ class TestLoadConfig:
             assert len(config.brokerages) == 1
             assert config.brokerages[0].name == 'TestBroker'
             assert config.fees.management_fee_annual == 0.02
+            assert config.fees.management_fee_quarterly == 0.005
             assert config.fees.performance_fee_rate == 0.20
             assert config.thresholds.large_cash_flow_pct == 0.15
             assert config.periods.fiscal_year_start_month == 1
@@ -195,4 +198,3 @@ class TestValidateConfig:
         config.periods.fiscal_year_start_month = 13  # Invalid
         issues = validate_config(config)
         assert any('fiscal year start month' in issue for issue in issues)
-

@@ -26,19 +26,25 @@ clients: []
 # Fee structure
 # Update these values to match your fee agreement
 fees:
-  # Management fee: 0.25% of start NAV per quarter (1% annual equivalent)
-  # Charged at the start of each quarter on opening NAV
+  # Management fee: 0.25% of NAV per quarter (1% annual equivalent)
+  # TIMING: Charged on the FIRST day of each quarter
   management_fee_quarterly: 0.0025  # 0.25% per quarter
   
   # Performance fee rate as decimal (25% = 0.25)
-  # Applied to gains above the hurdle rate
+  # Applied to NAV gains above (high-water-mark + quarterly hurdle)
   performance_fee_rate: 0.25
   
   # Annual hurdle rate as decimal (6% = 0.06)
-  # Performance fee only charged on gains exceeding this rate
-  # Uses carry-forward shortfall mechanism:
-  # - If year's return < hurdle, shortfall carries to next year
-  # - Shortfall accumulates but does NOT compound
+  # Split across quarters: Q1=1.5%, Q2=3%, Q3=4.5%, Q4=6%
+  # TIMING: Performance fee charged on LAST day of each quarter
+  # 
+  # HIGH-WATER-MARK LOGIC:
+  # - Fees only charged if NAV > highest previous NAV + accumulated hurdle
+  # - HWM is adjusted for flows (deposits/withdrawals)
+  # - HWM persists forever (never resets)
+  #
+  # HURDLE RESET:
+  # - Hurdle accumulation is applied each quarter (no annual reset)
   hurdle_rate_annual: 0.06
 
 # Thresholds for various calculations
@@ -52,6 +58,7 @@ thresholds:
 periods:
   # Fiscal year start month (1 = January, 2 = February, etc.)
   # February means fiscal year runs Feb 1 - Jan 31
+  # This also sets quarter boundaries for fee timing
   fiscal_year_start_month: 2
   
   # Years to calculate returns for
@@ -114,4 +121,3 @@ brokerage_settings:
     # Only include these operation types
     operation_types:
       - "FUNDING/WITHDRAWAL"
-

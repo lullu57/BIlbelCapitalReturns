@@ -242,7 +242,7 @@ class TestBuildDailyReturnsDirect:
         result = twr.build_daily_returns_direct(nav_df, trades_df)
         
         # Return formula: r = (end_nav - flow) / start_nav - 1
-        # This accounts for flows at start of day
+        # This accounts for flows at end of day
         assert all(np.isfinite(result['return']))
 
 
@@ -285,4 +285,3 @@ paths:
         
         # Should not crash, just find no accounts
         assert sum(len(clients) for clients in calc.brokerages.values()) == 0
-

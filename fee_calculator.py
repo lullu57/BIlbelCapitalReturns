@@ -1,6 +1,20 @@
 """
 Fee calculator for the GIPS-Compliant Returns Calculator.
 
+.. deprecated::
+    This module is deprecated. Use `gips_fee_tracker.py` instead.
+    
+    The new GIPSFeeTracker provides:
+    - High-water-mark for performance fees
+    - No carry-forward (hurdle resets at fiscal year start)
+    - Correct fee timing (mgmt at Q start, perf at Q end)
+    - Proper flow handling
+    
+    Import from gips_fee_tracker:
+        from gips_fee_tracker import GIPSFeeTracker, calculate_period_net_return
+
+LEGACY DOCUMENTATION (for reference only):
+-----------------------------------------
 Handles gross-to-net return calculations including:
 - Management fees (0.25% of start NAV per quarter = 1% annual)
 - Performance fees with carry-forward shortfall hurdle mechanism
@@ -10,6 +24,13 @@ Fee Calculation Methodology:
 - Performance fee: 25% of gains above 6% hurdle, calculated annually
 - All fees are deducted from NAV, then net return is calculated
 """
+
+import warnings
+warnings.warn(
+    "fee_calculator.py is deprecated. Use gips_fee_tracker.py instead.",
+    DeprecationWarning,
+    stacklevel=2
+)
 
 import pandas as pd
 import numpy as np
@@ -302,6 +323,9 @@ class QuarterlyFeeTracker:
         self.current_quarter = 1
         self.current_fiscal_year = None
         
+        # Track excess gain already charged to prevent double-counting
+        self.excess_gain_already_charged = 0.0
+        
         # Calculate quarter end months based on fiscal year start
         self._calculate_quarter_boundaries()
     
@@ -431,6 +455,9 @@ class QuarterlyFeeTracker:
         Performance fee is 25% of gains above the accumulated quarterly hurdle.
         Hurdle = 1.5% per quarter, accumulated (so Q2 hurdle = 3%, Q3 = 4.5%, Q4 = 6%)
         
+        IMPORTANT: To avoid double-counting, we track 'excess_gain_already_charged'
+        and only charge on the NEW incremental excess each quarter.
+        
         Args:
             quarter: Fiscal quarter (1-4)
             fiscal_year: Fiscal year label
@@ -452,11 +479,19 @@ class QuarterlyFeeTracker:
         # Calculate hurdle amount in NAV terms
         hurdle_amount = self.year_start_nav * effective_hurdle
         actual_gain = self.nav - self.year_start_nav
-        excess_gain = max(0, actual_gain - hurdle_amount)
         
-        # Performance fee on excess
-        perf_fee = excess_gain * self.perf_fee_rate
+        # TOTAL cumulative excess above hurdle
+        total_excess_gain = max(0, actual_gain - hurdle_amount)
+        
+        # CRITICAL: Only charge on NEW excess to prevent double-counting
+        incremental_excess = max(0, total_excess_gain - self.excess_gain_already_charged)
+        
+        # Performance fee on INCREMENTAL excess only
+        perf_fee = incremental_excess * self.perf_fee_rate
         self.nav = self.nav - perf_fee
+        
+        # Update tracker: we've now charged on all excess up to total_excess_gain
+        self.excess_gain_already_charged = total_excess_gain
         
         # Track for shortfall (only at year end, Q4)
         if quarter == 4:
@@ -468,6 +503,7 @@ class QuarterlyFeeTracker:
                 self.carried_shortfall = 0.0  # Reset if hurdle exceeded
             # Reset accumulated hurdle for new year
             self.accumulated_hurdle = 0.0
+            # excess_gain_already_charged is reset in start_new_fiscal_year
         
         record = {
             'event': 'performance_fee',
@@ -479,7 +515,9 @@ class QuarterlyFeeTracker:
             'accumulated_hurdle': effective_hurdle,
             'hurdle_amount': hurdle_amount,
             'actual_gain': actual_gain,
-            'excess_gain': excess_gain,
+            'total_excess_gain': total_excess_gain,
+            'excess_already_charged': self.excess_gain_already_charged - incremental_excess,
+            'incremental_excess': incremental_excess,
             'fee_rate': self.perf_fee_rate,
             'fee_amount': perf_fee,
             'nav_after': self.nav,
@@ -494,6 +532,7 @@ class QuarterlyFeeTracker:
         self.current_fiscal_year = fiscal_year
         self.current_quarter = 1
         self.accumulated_hurdle = 0.0
+        self.excess_gain_already_charged = 0.0  # Reset for new year
     
     def process_monthly_returns(
         self,
@@ -809,6 +848,11 @@ class NetNAVTracker:
         self.history: List[Dict] = []
         self.quarterly_events: List[Dict] = []
         
+        # CRITICAL: Track excess gain already charged to prevent double-counting
+        # When using cumulative YTD calculation with accumulating hurdle,
+        # we must only charge fees on the NEW excess, not the entire cumulative excess
+        self.excess_gain_already_charged = 0.0
+        
         # Calculate quarter boundaries
         self._calculate_quarter_boundaries()
     
@@ -924,6 +968,20 @@ class NetNAVTracker:
         Performance fee is 25% of (investment gain - hurdle amount).
         Investment gain = Gross NAV change - flows (pure investment performance).
         Fee is deducted from accumulated_fees which reduces net_nav.
+        
+        IMPORTANT: To avoid double-counting, we track 'excess_gain_already_charged'
+        and only charge on the NEW incremental excess each quarter.
+        
+        Example (no additional fee due to hurdle increase):
+        - Q1: 10% gain, 1.5% hurdle → excess = 8.5% → charge on 8.5%
+        - Q2: 10% cumulative gain (flat), 3% hurdle → total excess = 7%
+          → Already charged on 8.5% in Q1, NEW excess = max(0, 7% - 8.5%) = 0%
+          → NO FEE charged in Q2 (hurdle increase absorbed prior gains)
+        
+        Example (additional fee when gains outpace hurdle):
+        - Q1: 10% gain, 1.5% hurdle → excess = 8.5% → charge on 8.5%
+        - Q2: 15% cumulative gain, 3% hurdle → total excess = 12%
+          → NEW excess = 12% - 8.5% = 3.5% → charge only on 3.5%
         """
         self.current_quarter = quarter
         
@@ -942,12 +1000,19 @@ class NetNAVTracker:
         # Hurdle amount is based on the year start NAV (the capital base at risk)
         hurdle_amount = year_start * effective_hurdle
         
-        # Excess gain is investment gain above the hurdle
-        excess_gain = max(0, investment_gain - hurdle_amount)
+        # TOTAL cumulative excess gain above the accumulated hurdle
+        total_excess_gain = max(0, investment_gain - hurdle_amount)
         
-        # Performance fee is 25% of excess
-        fee_amount = excess_gain * self.perf_fee_rate
+        # CRITICAL: Only charge on NEW excess to prevent double-counting
+        # Incremental excess = Total excess - Excess we've already charged on
+        incremental_excess = max(0, total_excess_gain - self.excess_gain_already_charged)
+        
+        # Performance fee is 25% of INCREMENTAL excess only
+        fee_amount = incremental_excess * self.perf_fee_rate
         self.accumulated_fees += fee_amount
+        
+        # Update the tracker: we've now charged on all excess up to total_excess_gain
+        self.excess_gain_already_charged = total_excess_gain
         
         # Update net NAV: Gross NAV - Accumulated Fees
         self.net_nav = self.gross_nav - self.accumulated_fees
@@ -961,6 +1026,7 @@ class NetNAVTracker:
             else:
                 self.carried_shortfall = 0.0
             self.accumulated_hurdle = 0.0  # Reset for new year
+            # excess_gain_already_charged is reset in start_new_fiscal_year
         
         event = {
             'event': 'performance_fee',
@@ -973,7 +1039,9 @@ class NetNAVTracker:
             'investment_gain': investment_gain,
             'effective_hurdle_pct': effective_hurdle,
             'hurdle_amount': hurdle_amount,
-            'excess_gain': excess_gain,
+            'total_excess_gain': total_excess_gain,
+            'excess_already_charged': self.excess_gain_already_charged - incremental_excess,
+            'incremental_excess': incremental_excess,
             'fee_rate': self.perf_fee_rate,
             'fee_amount': fee_amount,
             'net_nav_after': self.net_nav,
@@ -992,6 +1060,7 @@ class NetNAVTracker:
         self.accumulated_hurdle = 0.0
         self.flows_since_year_start = 0.0  # Reset flow tracking
         self.current_quarter = 0
+        self.excess_gain_already_charged = 0.0  # Reset for new year - no prior fees to track
         
         self.history.append({
             'event': 'fiscal_year_start',

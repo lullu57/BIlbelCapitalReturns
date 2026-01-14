@@ -101,11 +101,13 @@ class TestPerformanceFee:
         
         # Gain = 5000
         # Hurdle amount = 100000 * 1.5% = 1500
-        # Excess = 5000 - 1500 = 3500
+        # Total excess = 5000 - 1500 = 3500
+        # Incremental excess = 3500 (first quarter, nothing charged yet)
         # Perf fee = 3500 * 25% = 875
         assert result['actual_gain'] == pytest.approx(5000.0)
         assert result['hurdle_amount'] == pytest.approx(1500.0)
-        assert result['excess_gain'] == pytest.approx(3500.0)
+        assert result['total_excess_gain'] == pytest.approx(3500.0)
+        assert result['incremental_excess'] == pytest.approx(3500.0)
         assert result['fee_amount'] == pytest.approx(875.0)
         assert tracker.nav == pytest.approx(105000.0 - 875.0)
     
@@ -121,37 +123,119 @@ class TestPerformanceFee:
         
         # Gain = 1000
         # Hurdle amount = 100000 * 1.5% = 1500
-        # Excess = 0 (below hurdle)
+        # Total excess = 0 (below hurdle)
+        # Incremental excess = 0
         # Perf fee = 0
         assert result['actual_gain'] == pytest.approx(1000.0)
-        assert result['excess_gain'] == pytest.approx(0.0)
+        assert result['total_excess_gain'] == pytest.approx(0.0)
+        assert result['incremental_excess'] == pytest.approx(0.0)
         assert result['fee_amount'] == pytest.approx(0.0)
         assert tracker.nav == pytest.approx(101000.0)  # Unchanged
     
     def test_accumulated_hurdle_across_quarters(self):
-        """Test that hurdle accumulates across quarters within a year."""
+        """Test that hurdle accumulates across quarters within a year, and no double-counting."""
         tracker = QuarterlyFeeTracker(initial_nav=100000.0)
         tracker.year_start_nav = 100000.0
         
-        # Q1: 2% return, hurdle = 1.5%, excess = 0.5%
+        # Q1: 2% return, hurdle = 1.5%, excess = 0.5% = €500
         tracker.nav = 102000.0
         q1_result = tracker.apply_performance_fee(quarter=1, fiscal_year="2024")
-        nav_after_q1 = tracker.nav
         
-        # Q2: total return since year start needs to exceed 3% (1.5% * 2)
-        # Let's set NAV to 103500 (3.5% gain from year start)
-        tracker.nav = 103500.0
+        # Q1: Total excess = €500, incremental = €500, fee = €125
+        assert q1_result['total_excess_gain'] == pytest.approx(500.0)
+        assert q1_result['incremental_excess'] == pytest.approx(500.0)
+        assert q1_result['fee_amount'] == pytest.approx(125.0)
+        nav_after_q1 = tracker.nav  # 102000 - 125 = 101875
+        
+        # Q2: Set NAV to 106000 (6% total gain from year start)
+        # This gives us NEW excess to charge on
+        tracker.nav = 106000.0
         q2_result = tracker.apply_performance_fee(quarter=2, fiscal_year="2024")
         
         # Accumulated hurdle = 3% (1.5% + 1.5%)
         assert q2_result['accumulated_hurdle'] == pytest.approx(0.03)
         
-        # Gain = 3500
+        # Gain = 6000
         # Hurdle amount = 100000 * 3% = 3000
-        # Excess = 500
-        # Perf fee = 125
-        assert q2_result['excess_gain'] == pytest.approx(500.0)
-        assert q2_result['fee_amount'] == pytest.approx(125.0)
+        # Total excess = 6000 - 3000 = 3000
+        # Already charged on 500 in Q1
+        # Incremental excess = 3000 - 500 = 2500
+        # Perf fee = 2500 * 25% = 625
+        assert q2_result['total_excess_gain'] == pytest.approx(3000.0)
+        assert q2_result['incremental_excess'] == pytest.approx(2500.0)
+        assert q2_result['fee_amount'] == pytest.approx(625.0)
+
+    def test_no_double_counting_when_excess_unchanged(self):
+        """
+        Test that no fees are charged when cumulative excess hasn't increased.
+        
+        Scenario: Strong Q1 gains, then flat Q2 that still exceeds new hurdle
+        but doesn't add new excess - should charge €0 in Q2.
+        """
+        tracker = QuarterlyFeeTracker(initial_nav=100000.0)
+        tracker.year_start_nav = 100000.0
+        
+        # Q1: 10% return, hurdle = 1.5%, excess = 8.5% = €8,500
+        tracker.nav = 110000.0
+        q1_result = tracker.apply_performance_fee(quarter=1, fiscal_year="2024")
+        assert q1_result['total_excess_gain'] == pytest.approx(8500.0)
+        assert q1_result['fee_amount'] == pytest.approx(2125.0)  # 8500 * 25%
+        
+        # Q2: NAV drops to 103500 (3.5% total from year start)
+        # Still above Q2 hurdle (3%), but excess is LESS than Q1
+        tracker.nav = 103500.0
+        q2_result = tracker.apply_performance_fee(quarter=2, fiscal_year="2024")
+        
+        # Gain = 3500, Hurdle = 3% = 3000
+        # Total excess = 500, but we already charged on 8500!
+        # Incremental = max(0, 500 - 8500) = 0
+        # No fee should be charged
+        assert q2_result['total_excess_gain'] == pytest.approx(500.0)
+        assert q2_result['incremental_excess'] == pytest.approx(0.0)
+        assert q2_result['fee_amount'] == pytest.approx(0.0)
+
+    def test_double_counting_prevention_full_year(self):
+        """
+        Test double-counting prevention across all 4 quarters.
+        
+        Verifies that total fees charged equals exactly 25% of final excess,
+        not more due to compounding.
+        """
+        tracker = QuarterlyFeeTracker(initial_nav=100000.0)
+        tracker.year_start_nav = 100000.0
+        
+        total_fees = 0.0
+        
+        # Q1: 3% return (above 1.5% hurdle)
+        tracker.nav = 103000.0
+        q1 = tracker.apply_performance_fee(quarter=1, fiscal_year="2024")
+        total_fees += q1['fee_amount']
+        # Excess = 3000 - 1500 = 1500, Fee = 375
+        
+        # Q2: 5% total return (above 3% hurdle)  
+        tracker.nav = 105000.0
+        q2 = tracker.apply_performance_fee(quarter=2, fiscal_year="2024")
+        total_fees += q2['fee_amount']
+        # Excess = 5000 - 3000 = 2000, Incremental = 2000 - 1500 = 500, Fee = 125
+        
+        # Q3: 8% total return (above 4.5% hurdle)
+        tracker.nav = 108000.0
+        q3 = tracker.apply_performance_fee(quarter=3, fiscal_year="2024")
+        total_fees += q3['fee_amount']
+        # Excess = 8000 - 4500 = 3500, Incremental = 3500 - 2000 = 1500, Fee = 375
+        
+        # Q4: 12% total return (above 6% hurdle)
+        tracker.nav = 112000.0
+        q4 = tracker.apply_performance_fee(quarter=4, fiscal_year="2024")
+        total_fees += q4['fee_amount']
+        # Excess = 12000 - 6000 = 6000, Incremental = 6000 - 3500 = 2500, Fee = 625
+        
+        # Total fees should equal 25% of final excess (6000)
+        final_excess = 112000.0 - 100000.0 - (100000.0 * 0.06)  # 12000 - 6000 = 6000
+        expected_total_fees = final_excess * 0.25  # 1500
+        
+        assert total_fees == pytest.approx(expected_total_fees)
+        assert total_fees == pytest.approx(1500.0)
 
 
 class TestQuarterBoundaries:

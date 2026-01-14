@@ -11,14 +11,11 @@ import openpyxl
 import utils
 import flow_utils
 from config_loader import load_config, Config, PeriodsConfig
-from fee_calculator import (
-    FeeCalculator, 
-    PerformanceFeeCalculator,
-    QuarterlyFeeTracker,
-    NetNAVTracker,
-    annual_to_monthly_fee,
-    calculate_net_return,
-    calculate_net_return_from_nav
+from gips_fee_tracker import (
+    GIPSFeeTracker,
+    calculate_net_twr_from_monthly,
+    calculate_period_net_return,
+    annual_to_monthly_fee
 )
 
 
@@ -368,7 +365,7 @@ def build_daily_returns_direct(nav_df: pd.DataFrame, trades_df: pd.DataFrame) ->
     """
     Build daily returns using the reference method:
       r_i = (end_nav - flow_on_end_date) / start_nav - 1
-    where flows on the day are treated as occurring at the start of that day.
+    where flows on the day are treated as occurring at the end of that day.
     """
     daily = build_account_daily_from_nav_flows(nav_df, trades_df)
     if daily.empty:
@@ -377,11 +374,15 @@ def build_daily_returns_direct(nav_df: pd.DataFrame, trades_df: pd.DataFrame) ->
     daily = daily.sort_values('date')
     def compute_ret(row):
         start_v = float(row['start_nav']) if pd.notna(row['start_nav']) else 0.0
-        if start_v <= 0:
-            return 0.0
         end_v = float(row['end_nav']) if pd.notna(row['end_nav']) else start_v
         flow_v = float(row['flow']) if pd.notna(row['flow']) else 0.0
-        return (end_v - flow_v) / start_v - 1.0
+        
+        if start_v > 0:
+            # Normal case: calculate return based on starting NAV
+            return (end_v - flow_v) / start_v - 1.0
+        else:
+            # No starting value and no flow - no return to calculate
+            return 0.0
 
     daily['return'] = daily.apply(compute_ret, axis=1)
     return daily[['date', 'return', 'start_nav', 'end_nav', 'flow']]
@@ -677,7 +678,14 @@ def build_daily_composite(daily_by_account: Dict[str, pd.DataFrame]) -> pd.DataF
             end_total += end_nav
             flow_total += flow
 
-        daily_return = (end_total - start_total - flow_total) / start_total if start_total > 0 else 0.0
+        # Calculate composite return with end-of-day flows
+        if start_total > 0:
+            # Normal case: calculate return based on starting NAV
+            daily_return = (end_total - start_total - flow_total) / start_total
+        else:
+            # No starting value and no flow - no return to calculate
+            daily_return = 0.0
+            
         rows.append({
             'date': dt,
             'return': daily_return,
@@ -1042,25 +1050,193 @@ def save_all_results(results: Dict, output_dir: str = 'results', config: Optiona
         else:
             monthly_returns = pd.DataFrame(columns=['month', 'return', 'start_of_month_nav', 'end_of_month_nav', 'monthly_flow', 'nav'])
 
-        # Calculate gross and net returns with fee breakdown
+        # Prepare monthly data for fee tracking (GIPSFeeTracker)
+        monthly_returns_for_fees = None
+        monthly_net_returns = pd.DataFrame()
+        nav_tracker = None
+        fee_history = []
+        quarterly_events = []
+        daily_flows_for_fees = None
+        initial_nav = 100.0
+        initial_nav_display = None
+        actual_final_gross_nav = 100.0
+        total_flows = 0.0
+        final_net_nav = initial_nav
+        total_mgmt_fees = 0.0
+        total_perf_fees = 0.0
+        fee_drag = 0.0
+
+        # Build monthly data with NAV and flows for fee tracking
+        if isinstance(data.get('daily_returns'), pd.DataFrame) and not data['daily_returns'].empty:
+            dr = data['daily_returns'].copy()
+            dr['date'] = pd.to_datetime(dr['date']).dt.normalize()
+            dr['month'] = dr['date'].dt.to_period('M')
+
+            flow_col = 'flow'
+            if flow_col not in dr.columns and 'flow_total' in dr.columns:
+                flow_col = 'flow_total'
+            if flow_col in dr.columns:
+                daily_flows_for_fees = dr[['date', flow_col]].rename(columns={flow_col: 'flow'})
+
+            monthly_rows: List[Dict] = []
+            for month, grp in dr.groupby('month'):
+                grp = grp.sort_values('date')
+                mret = (1 + grp['return']).prod() - 1
+
+                if 'start_nav_total' in grp.columns:
+                    start_nav = grp.iloc[0]['start_nav_total']
+                    end_nav = grp.iloc[-1]['end_nav_total'] if 'end_nav_total' in grp.columns else start_nav
+                elif 'start_nav' in grp.columns:
+                    start_nav = grp.iloc[0]['start_nav']
+                    end_nav = grp.iloc[-1]['end_nav'] if 'end_nav' in grp.columns else start_nav
+                else:
+                    start_nav = np.nan
+                    end_nav = np.nan
+
+                if 'flow_total' in grp.columns:
+                    month_flow = grp['flow_total'].sum()
+                elif 'flow' in grp.columns:
+                    month_flow = grp['flow'].sum()
+                else:
+                    month_flow = 0
+
+                monthly_rows.append({
+                    'month': month,
+                    'return': mret,
+                    'start_nav': start_nav if pd.notna(start_nav) else 0,
+                    'end_nav': end_nav if pd.notna(end_nav) else 0,
+                    'flow': month_flow if pd.notna(month_flow) else 0
+                })
+
+            monthly_returns_for_fees = pd.DataFrame(monthly_rows)
+
+            if not monthly_returns_for_fees.empty:
+                first_nav = monthly_returns_for_fees['start_nav'].iloc[0]
+                if pd.notna(first_nav) and first_nav > 0:
+                    initial_nav = first_nav
+                last_nav = monthly_returns_for_fees['end_nav'].iloc[-1]
+                if pd.notna(last_nav) and last_nav > 0:
+                    actual_final_gross_nav = last_nav
+                total_flows = monthly_returns_for_fees['flow'].sum()
+        elif isinstance(monthly_returns, pd.DataFrame) and 'return' in monthly_returns.columns and not monthly_returns.empty:
+            monthly_returns_for_fees = monthly_returns.rename(columns={
+                'start_of_month_nav': 'start_nav',
+                'end_of_month_nav': 'end_nav',
+                'monthly_flow': 'flow'
+            })[['month', 'return', 'start_nav', 'end_nav', 'flow']].copy()
+            if 'start_nav' in monthly_returns_for_fees.columns:
+                first_nav = monthly_returns_for_fees['start_nav'].iloc[0]
+                if pd.notna(first_nav) and first_nav > 0:
+                    initial_nav = first_nav
+            if 'end_nav' in monthly_returns_for_fees.columns:
+                last_nav = monthly_returns_for_fees['end_nav'].iloc[-1]
+                if pd.notna(last_nav) and last_nav > 0:
+                    actual_final_gross_nav = last_nav
+
+        # Determine initial NAV for reporting (first positive actual NAV)
+        if isinstance(data.get('daily_returns'), pd.DataFrame) and not data['daily_returns'].empty:
+            dr_nav = data['daily_returns'].copy()
+            dr_nav['date'] = pd.to_datetime(dr_nav['date']).dt.normalize()
+            nav_col = 'end_nav'
+            if nav_col not in dr_nav.columns and 'end_nav_total' in dr_nav.columns:
+                nav_col = 'end_nav_total'
+            if nav_col in dr_nav.columns:
+                pos_navs = dr_nav[dr_nav[nav_col] > 0].sort_values('date')
+                if not pos_navs.empty:
+                    initial_nav_display = float(pos_navs.iloc[0][nav_col])
+
+        if (initial_nav_display is None or not np.isfinite(initial_nav_display) or initial_nav_display <= 0):
+            if monthly_returns_for_fees is not None and not monthly_returns_for_fees.empty:
+                pos_end = monthly_returns_for_fees[monthly_returns_for_fees['end_nav'] > 0]
+                if not pos_end.empty:
+                    initial_nav_display = float(pos_end.iloc[0]['end_nav'])
+                else:
+                    pos_start = monthly_returns_for_fees[monthly_returns_for_fees['start_nav'] > 0]
+                    if not pos_start.empty:
+                        initial_nav_display = float(pos_start.iloc[0]['start_nav'])
+
+        if initial_nav_display is None or not np.isfinite(initial_nav_display) or initial_nav_display <= 0:
+            initial_nav_display = initial_nav
+
+        # Run fee tracker if we have monthly data with NAV/flows
+        fiscal_year_start_month = 2  # Default to February
+        quarterly_mgmt_fee = 0.0025  # 0.25% per quarter
+        quarterly_hurdle = 0.015     # 1.5% per quarter
+        if config is not None:
+            fiscal_year_start_month = config.periods.fiscal_year_start_month
+            quarterly_mgmt_fee = config.fees.management_fee_quarterly
+            quarterly_hurdle = hurdle_rate / 4
+
+        if monthly_returns_for_fees is not None and not monthly_returns_for_fees.empty:
+            nav_tracker = GIPSFeeTracker(
+                initial_nav=initial_nav,
+                quarterly_mgmt_fee=quarterly_mgmt_fee,
+                quarterly_hurdle_rate=quarterly_hurdle,
+                perf_fee_rate=perf_fee_rate,
+                fiscal_year_start_month=fiscal_year_start_month
+            )
+
+            fee_result = nav_tracker.process_monthly_data(
+                monthly_returns_for_fees,
+                month_column='month',
+                gross_nav_column='end_nav',
+                flow_column='flow',
+                return_column='return',
+                daily_flows=daily_flows_for_fees
+            )
+
+            initial_nav = fee_result['initial_nav']
+            actual_final_gross_nav = fee_result['final_gross_nav']
+            final_net_nav = fee_result['final_net_nav']
+            total_mgmt_fees = fee_result['total_mgmt_fees']
+            total_perf_fees = fee_result['total_perf_fees']
+            total_flows = fee_result['total_flows']
+            fee_drag = fee_result['total_fees']
+            fee_history = fee_result.get('history', [])
+            quarterly_events = fee_result.get('quarterly_events', [])
+            monthly_net_returns = fee_result.get('monthly_net_returns', pd.DataFrame())
+            if not monthly_net_returns.empty:
+                monthly_net_returns = monthly_net_returns.copy()
+                monthly_net_returns['period'] = pd.to_datetime(
+                    dict(year=monthly_net_returns['year'], month=monthly_net_returns['month'], day=1)
+                ).dt.to_period('M')
+
+        # Calculate gross and net returns with GIPS-compliant fee handling
         if 'return' in monthly_returns.columns and not monthly_returns.empty:
-            # Store raw numeric returns for calculations
             raw_returns = monthly_returns['return'].copy()
-            
-            # Gross return is the original return
             monthly_returns['gross_return'] = raw_returns
-            
-            # Management fee (monthly)
-            monthly_returns['management_fee'] = monthly_mgmt_fee
-            
-            # Net return = Gross - Management fee
-            monthly_returns['net_return'] = raw_returns - monthly_mgmt_fee
-            
-            # Format for display
-            monthly_returns['gross_return'] = monthly_returns['gross_return'].map('{:.4%}'.format)
-            monthly_returns['management_fee'] = monthly_returns['management_fee'].map('{:.4%}'.format)
-            monthly_returns['net_return'] = monthly_returns['net_return'].map('{:.4%}'.format)
-            
+            monthly_returns['gross_return_raw'] = raw_returns
+
+            net_return_map = {}
+            if not monthly_net_returns.empty:
+                net_return_map = dict(zip(monthly_net_returns['period'], monthly_net_returns['net_return']))
+
+            def month_number(val):
+                if hasattr(val, 'month'):
+                    return val.month
+                try:
+                    return pd.Period(val).month
+                except Exception:
+                    return None
+
+            monthly_returns['net_return'] = monthly_returns['month'].map(net_return_map)
+            monthly_returns['net_return_raw'] = monthly_returns['net_return']
+            if nav_tracker is not None:
+                quarter_starts = set(nav_tracker.quarter_start_months)
+                monthly_returns['management_fee'] = monthly_returns['month'].apply(
+                    lambda p: quarterly_mgmt_fee if month_number(p) in quarter_starts else 0.0
+                )
+            else:
+                monthly_returns['management_fee'] = np.nan
+            monthly_returns['management_fee_raw'] = monthly_returns['management_fee']
+
+            def fmt_pct(val):
+                return '{:.4%}'.format(val) if pd.notna(val) else ''
+
+            monthly_returns['gross_return'] = monthly_returns['gross_return'].map(fmt_pct)
+            monthly_returns['net_return'] = monthly_returns['net_return'].map(fmt_pct)
+            monthly_returns['management_fee'] = monthly_returns['management_fee'].map(fmt_pct)
+
             # Keep original return column for compatibility
             monthly_returns['return'] = monthly_returns['gross_return']
         
@@ -1139,139 +1315,62 @@ def save_all_results(results: Dict, output_dir: str = 'results', config: Optiona
         
         num_years = max(1, num_months / 12)
         
-        # Get actual NAV data from daily returns (includes flows)
-        initial_nav = 100.0  # Default for percentage calculations
-        actual_final_gross_nav = 100.0  # Actual gross NAV from data
-        total_flows = 0.0
-        
-        # Prepare monthly data with ACTUAL NAV values and flows
-        monthly_returns_for_fees = None
-        
-        # First try to get from daily_returns which has actual NAV totals
-        if isinstance(data.get('daily_returns'), pd.DataFrame) and not data['daily_returns'].empty:
-            dr = data['daily_returns'].copy()
-            dr['date'] = pd.to_datetime(dr['date']).dt.normalize()
-            dr['month'] = dr['date'].dt.to_period('M')
-            
-            monthly_rows: List[Dict] = []
-            for month, grp in dr.groupby('month'):
-                grp = grp.sort_values('date')
-                mret = (1 + grp['return']).prod() - 1
-                
-                # Get actual NAV values (use start_nav_total/end_nav_total if available from composite)
-                if 'start_nav_total' in grp.columns:
-                    start_nav = grp.iloc[0]['start_nav_total']
-                    end_nav = grp.iloc[-1]['end_nav_total'] if 'end_nav_total' in grp.columns else start_nav
-                elif 'start_nav' in grp.columns:
-                    start_nav = grp.iloc[0]['start_nav']
-                    end_nav = grp.iloc[-1]['end_nav'] if 'end_nav' in grp.columns else start_nav
-                else:
-                    start_nav = np.nan
-                    end_nav = np.nan
-                
-                # Get flow total for the month
-                if 'flow_total' in grp.columns:
-                    month_flow = grp['flow_total'].sum()
-                elif 'flow' in grp.columns:
-                    month_flow = grp['flow'].sum()
-                else:
-                    month_flow = 0
-                
-                monthly_rows.append({
-                    'month': month, 
-                    'return': mret, 
-                    'start_nav': start_nav if pd.notna(start_nav) else 0,
-                    'end_nav': end_nav if pd.notna(end_nav) else 0,
-                    'flow': month_flow if pd.notna(month_flow) else 0
-                })
-            
-            monthly_returns_for_fees = pd.DataFrame(monthly_rows)
-            
-            if not monthly_returns_for_fees.empty:
-                # Get initial NAV (first month's start NAV)
-                first_nav = monthly_returns_for_fees['start_nav'].iloc[0]
-                if pd.notna(first_nav) and first_nav > 0:
-                    initial_nav = first_nav
-                
-                # Get final gross NAV (last month's end NAV)
-                last_nav = monthly_returns_for_fees['end_nav'].iloc[-1]
-                if pd.notna(last_nav) and last_nav > 0:
-                    actual_final_gross_nav = last_nav
-                
-                # Get total flows
-                total_flows = monthly_returns_for_fees['flow'].sum()
-        
-        # Fallback to monthly_returns if no daily data
-        elif isinstance(data.get('monthly_returns'), pd.DataFrame) and 'return' in data['monthly_returns'].columns:
-            monthly_returns_for_fees = data['monthly_returns'].copy()
-            if 'start_of_month_nav' in monthly_returns_for_fees.columns:
-                first_nav = monthly_returns_for_fees['start_of_month_nav'].iloc[0]
-                if pd.notna(first_nav) and first_nav > 0:
-                    initial_nav = first_nav
-            if 'end_of_month_nav' in monthly_returns_for_fees.columns:
-                last_nav = monthly_returns_for_fees['end_of_month_nav'].iloc[-1]
-                if pd.notna(last_nav) and last_nav > 0:
-                    actual_final_gross_nav = last_nav
-        
-        # Use NetNAVTracker for comprehensive NAV tracking with flows and fees
-        nav_tracker = None
-        fee_history = []
-        quarterly_events = []
-        final_net_nav = initial_nav  # Will be updated
-        fee_drag = 0.0
-        
-        if monthly_returns_for_fees is not None and not monthly_returns_for_fees.empty:
-            nav_tracker = NetNAVTracker(
-                initial_gross_nav=initial_nav,
-                quarterly_mgmt_fee=quarterly_mgmt_fee,
-                annual_hurdle_rate=hurdle_rate,
-                perf_fee_rate=perf_fee_rate,
-                fiscal_year_start_month=fiscal_year_start_month
+        net_absolute = gross_absolute
+        net_annualized = gross_annualized
+        fallback_used = False
+        fallback_range = None
+        if not monthly_net_returns.empty:
+            net_absolute, net_annualized = calculate_net_twr_from_monthly(
+                monthly_net_returns,
+                return_column='net_return'
             )
-            
-            # Process monthly data with actual NAV and flows
-            fee_result = nav_tracker.process_monthly_data(
-                monthly_returns_for_fees,
-                month_column='month',
-                return_column='return',
-                start_nav_column='start_nav',
-                gross_nav_column='end_nav',
-                flow_column='flow'
-            )
-            
-            # Get results - now using actual NAV values
-            initial_nav = fee_result['initial_gross_nav']  # Use actual initial NAV
-            actual_final_gross_nav = fee_result['final_gross_nav']
-            final_net_nav = fee_result['final_net_nav']
-            total_mgmt_fees = fee_result['total_mgmt_fees']
-            total_perf_fees = fee_result['total_perf_fees']
-            total_flows = fee_result['total_flows']
-            fee_drag = fee_result['fee_drag']
-            fee_history = fee_result.get('history', [])
-            quarterly_events = fee_result.get('quarterly_events', [])
-            
-            # Net TWR will be calculated later after we collect annual net returns
-            # For now, set a placeholder that will be updated
-            net_absolute = gross_absolute  # Will be recalculated below
         else:
-            # Fallback to simple calculation
-            total_fee_result = calculate_net_return_from_nav(
+            fallback_used = True
+            if isinstance(data.get('daily_returns'), pd.DataFrame) and not data['daily_returns'].empty:
+                dr_range = data['daily_returns'].copy()
+                dr_range['date'] = pd.to_datetime(dr_range['date']).dt.normalize()
+                start_dt = dr_range['date'].min()
+                end_dt = dr_range['date'].max()
+                fallback_range = (start_dt, end_dt)
+            elif monthly_returns_for_fees is not None and not monthly_returns_for_fees.empty:
+                month_vals = pd.to_datetime(monthly_returns_for_fees['month'].astype(str), errors='coerce').dropna()
+                if not month_vals.empty:
+                    start_dt = month_vals.min()
+                    end_dt = (month_vals.max() + pd.offsets.MonthEnd(0)).normalize()
+                    fallback_range = (start_dt, end_dt)
+
+            total_fee_result = calculate_period_net_return(
                 gross_return=gross_absolute,
                 quarterly_mgmt_fee=quarterly_mgmt_fee,
-                performance_fee_rate=perf_fee_rate,
-                hurdle_rate=hurdle_rate,
-                num_quarters=int(num_months / 3)
+                quarterly_hurdle=hurdle_rate / 4,
+                perf_fee_rate=perf_fee_rate,
+                num_quarters=max(1, int(num_months / 3))
             )
             net_absolute = total_fee_result['net_return']
             total_mgmt_fees = total_fee_result['mgmt_fee_impact'] * initial_nav
-            total_perf_fees = total_fee_result['perf_fee_amount'] * initial_nav
-            final_nav = initial_nav * (1 + net_absolute)
-        
-        # Calculate annualized net return
-        if net_absolute > -1:
-            net_annualized = (1 + net_absolute) ** (1 / num_years) - 1
-        else:
-            net_annualized = -1.0  # Total loss
+            total_perf_fees = total_fee_result['perf_fee_impact'] * initial_nav
+            fee_drag = total_mgmt_fees + total_perf_fees
+            final_net_nav = initial_nav * (1 + net_absolute)
+            if net_absolute > -1:
+                net_annualized = (1 + net_absolute) ** (1 / num_years) - 1
+            else:
+                net_annualized = -1.0
+
+        def fmt_pct_value(val: Optional[float], default: str = 'N/A') -> str:
+            if val is None:
+                return default
+            if not np.isfinite(val):
+                return default
+            return f'{val:.4%}'
+
+        tracker_summary = nav_tracker.get_summary() if nav_tracker is not None else {}
+        net_index_current = tracker_summary.get('net_index') if tracker_summary else None
+        hwm_index_current = tracker_summary.get('high_water_mark') if tracker_summary else None
+        cumulative_hurdle_pct_current = tracker_summary.get('cumulative_hurdle_pct') if tracker_summary else None
+        hurdle_threshold_return = None
+        hurdle_threshold_index = tracker_summary.get('hurdle_threshold') if tracker_summary else None
+        if hurdle_threshold_index is not None:
+            hurdle_threshold_return = hurdle_threshold_index - 1
         
         # Add section header
         summary_data.append({'Metric': '=== GROSS RETURNS (Before Fees) ===', 'Value': ''})
@@ -1300,9 +1399,28 @@ def save_all_results(results: Dict, output_dir: str = 'results', config: Optiona
                 'Metric': 'Annualized Return (Net TWR)',
                 'Value': f'{net_annualized:.4%}'
             },
+        ])
+
+        if fallback_used:
+            if fallback_range is not None:
+                start_str = fallback_range[0].strftime('%Y-%m-%d')
+                end_str = fallback_range[1].strftime('%Y-%m-%d')
+                warning_text = (
+                    "WARNING: Net returns use fallback fee simulation "
+                    f"(no flow proration) for {start_str} to {end_str}"
+                )
+            else:
+                warning_text = (
+                    "WARNING: Net returns use fallback fee simulation "
+                    "(no flow proration); period unavailable"
+                )
+            summary_data.append({'Metric': warning_text, 'Value': ''})
+            logging.warning(warning_text)
+
+        summary_data.extend([
             {
                 'Metric': 'Initial NAV (Actual)',
-                'Value': f'€{initial_nav:,.2f}'
+                'Value': f'€{initial_nav_display:,.2f}'
             },
             {
                 'Metric': 'Final NAV - Gross (Actual from Accounts)',
@@ -1352,7 +1470,7 @@ def save_all_results(results: Dict, output_dir: str = 'results', config: Optiona
             },
             {
                 'Metric': 'Hurdle Mechanism',
-                'Value': 'Carry-forward shortfall (non-compounding)'
+                'Value': 'Cumulative quarterly hurdle (no reset)'
             }
         ])
         
@@ -1360,7 +1478,7 @@ def save_all_results(results: Dict, output_dir: str = 'results', config: Optiona
         summary_data.append({'Metric': '', 'Value': ''})
         summary_data.append({'Metric': '=== QUARTERLY NAV TRACKING (Gross vs Net NAV with Flows) ===', 'Value': ''})
         
-        # Use quarterly events from the NetNAVTracker for accurate tracking
+        # Use quarterly events from the GIPSFeeTracker for accurate tracking
         if quarterly_events:
             # Group events by quarter
             quarterly_actual = {}
@@ -1379,19 +1497,28 @@ def save_all_results(results: Dict, output_dir: str = 'results', config: Optiona
                         'mgmt_fee': 0,
                         'perf_fee': 0,
                         'net_nav_after_mgmt': 0,
-                        'net_nav_after_perf': 0
+                        'net_nav_after_perf': 0,
+                        'high_water_mark': 0.0,
+                        'cumulative_hurdle_pct': 0.0,
+                        'net_index_after': 0.0
                     }
                 
-                if event['event'] == 'management_fee':
+                if event['event'] in ('management_fee', 'management_fee_adjustment'):
                     quarterly_actual[key]['gross_nav'] = event.get('gross_nav', 0)
-                    quarterly_actual[key]['mgmt_fee'] = event.get('fee_amount', 0)
+                    quarterly_actual[key]['mgmt_fee'] += event.get('fee_amount', 0)
                     quarterly_actual[key]['net_nav_after_mgmt'] = event.get('net_nav_after', 0)
+                    quarterly_actual[key]['high_water_mark'] = event.get('high_water_mark', 0.0)
+                    quarterly_actual[key]['cumulative_hurdle_pct'] = event.get('cumulative_hurdle_pct', 0.0)
+                    quarterly_actual[key]['net_index_after'] = event.get('net_index_after', 0.0)
                 
                 elif event['event'] == 'performance_fee':
                     quarterly_actual[key]['perf_fee'] = event.get('fee_amount', 0)
                     quarterly_actual[key]['net_nav_after_perf'] = event.get('net_nav_after', 0)
                     quarterly_actual[key]['excess_gain'] = event.get('excess_gain', 0)
                     quarterly_actual[key]['effective_hurdle'] = event.get('effective_hurdle', 0)
+                    quarterly_actual[key]['high_water_mark'] = event.get('high_water_mark_after', 0.0)
+                    quarterly_actual[key]['cumulative_hurdle_pct'] = event.get('accumulated_hurdle_pct', 0.0)
+                    quarterly_actual[key]['net_index_after'] = event.get('net_index_after', 0.0)
             
             # Get monthly NAV and flow data for each quarter
             if monthly_returns_for_fees is not None:
@@ -1428,7 +1555,7 @@ def save_all_results(results: Dict, output_dir: str = 'results', config: Optiona
             # Add initial NAV row
             summary_data.append({
                 'Metric': 'Starting NAV (Actual Combined)',
-                'Value': f'€{initial_nav:,.2f}'
+                'Value': f'€{initial_nav_display:,.2f}'
             })
             summary_data.append({'Metric': '', 'Value': ''})
             
@@ -1502,6 +1629,26 @@ def save_all_results(results: Dict, output_dir: str = 'results', config: Optiona
                             'Metric': f'{fy} Q{q} - Fee Impact (Cumulative)',
                             'Value': f'€{fee_drag_q:,.2f}'
                         })
+
+                net_index_after = q_data.get('net_index_after', None)
+                hwm_index = q_data.get('high_water_mark', None)
+                cumulative_hurdle_pct = q_data.get('cumulative_hurdle_pct', None)
+
+                if net_index_after is not None and net_index_after > 0:
+                    summary_data.append({
+                        'Metric': f'{fy} Q{q} - Net Total Return to Date',
+                        'Value': fmt_pct_value(net_index_after - 1)
+                    })
+                if hwm_index is not None and hwm_index > 0:
+                    summary_data.append({
+                        'Metric': f'{fy} Q{q} - High Water Mark (Net Return to Date)',
+                        'Value': fmt_pct_value(hwm_index - 1)
+                    })
+                if cumulative_hurdle_pct is not None:
+                    summary_data.append({
+                        'Metric': f'{fy} Q{q} - Cumulative Hurdle (Since Inception)',
+                        'Value': fmt_pct_value(cumulative_hurdle_pct)
+                    })
                 
                 summary_data.append({'Metric': '', 'Value': ''})
             
@@ -1583,6 +1730,59 @@ def save_all_results(results: Dict, output_dir: str = 'results', config: Optiona
                     'Value': f'€{actual_final_gross_nav - final_net_nav:,.2f}'
                 }
             ])
+
+            net_contributions_base = cumulative_flows
+            if np.isfinite(net_contributions_base) and abs(net_contributions_base) > 0:
+                summary_data.extend([
+                    {
+                        'Metric': 'Total Management Fees (% of Net Contributions)',
+                        'Value': fmt_pct_value(cumulative_mgmt / net_contributions_base)
+                    },
+                    {
+                        'Metric': 'Total Performance Fees (% of Net Contributions)',
+                        'Value': fmt_pct_value(cumulative_perf / net_contributions_base)
+                    },
+                    {
+                        'Metric': 'Total Fees (% of Net Contributions)',
+                        'Value': fmt_pct_value((cumulative_mgmt + cumulative_perf) / net_contributions_base)
+                    },
+                    {
+                        'Metric': 'Fee Impact (% of Net Contributions)',
+                        'Value': fmt_pct_value((actual_final_gross_nav - final_net_nav) / net_contributions_base)
+                    }
+                ])
+
+            summary_data.extend([
+                {
+                    'Metric': 'Gross Total Return (TWR)',
+                    'Value': f'{gross_absolute:.4%}'
+                },
+                {
+                    'Metric': 'Net Total Return (TWR)',
+                    'Value': f'{net_absolute:.4%}'
+                }
+            ])
+
+            if net_index_current is not None:
+                summary_data.append({
+                    'Metric': 'Net Total Return (Index-based, After Fees)',
+                    'Value': fmt_pct_value(net_index_current - 1)
+                })
+            if hwm_index_current is not None:
+                summary_data.append({
+                    'Metric': 'High Water Mark (Net Return to Date)',
+                    'Value': fmt_pct_value(hwm_index_current - 1)
+                })
+            if cumulative_hurdle_pct_current is not None:
+                summary_data.append({
+                    'Metric': 'Cumulative Hurdle (Since Inception)',
+                    'Value': fmt_pct_value(cumulative_hurdle_pct_current)
+                })
+            if hurdle_threshold_return is not None:
+                summary_data.append({
+                    'Metric': 'Current Hurdle Threshold (Net Return to Date)',
+                    'Value': fmt_pct_value(hurdle_threshold_return)
+                })
         else:
             summary_data.append({
                 'Metric': 'Note',
@@ -1594,48 +1794,55 @@ def save_all_results(results: Dict, output_dir: str = 'results', config: Optiona
         summary_data.append({'Metric': '=== PERIOD RETURNS ===', 'Value': ''})
         
         # Add period returns if they exist
-        # Also collect annual net returns for proper compounded Net TWR calculation
-        annual_net_returns_list = []
-        
         if 'period_returns' in data:
-            # Create performance fee calculator for period returns
-            perf_calc = PerformanceFeeCalculator(hurdle_rate=hurdle_rate, fee_rate=perf_fee_rate)
-            
             # Get quarterly management fee from config
             quarterly_mgmt_fee = 0.0025  # Default 0.25% per quarter
+            quarterly_hurdle = 0.015     # Default 1.5% per quarter
+            
             if config is not None and hasattr(config.fees, 'management_fee_quarterly'):
                 quarterly_mgmt_fee = config.fees.management_fee_quarterly
+            if config is not None:
+                quarterly_hurdle = hurdle_rate / 4
             
+            period_windows = config.periods.get_period_windows() if config is not None else {}
             for period, period_data in data['period_returns'].items():
                 period_name = f'{period} Returns' if '_ytd' not in period else f'{period.replace("_ytd", "")} Returns (YTD)'
                 gross_period_return = period_data["return"]
-                
-                # Calculate net return using NAV-based fee calculation
-                # 4 quarters for a full year, fewer for partial years
-                num_quarters = 4
-                if '_ytd' in period:
-                    # For YTD, estimate quarters based on current month
-                    num_quarters = 2  # Approximate
-                
-                # Use the proper NAV-based calculation
-                fee_result = calculate_net_return_from_nav(
-                    gross_return=gross_period_return,
-                    quarterly_mgmt_fee=quarterly_mgmt_fee,
-                    performance_fee_rate=perf_fee_rate,
-                    hurdle_rate=hurdle_rate,
-                    num_quarters=num_quarters
-                )
-                
-                final_net_return = fee_result['net_return']
-                perf_fee = fee_result['perf_fee_amount']
-                mgmt_fee = fee_result['mgmt_fee_impact']
-                
-                # Collect annual returns for compounding (full years only)
-                if period.isdigit() and len(period) == 4:
-                    annual_net_returns_list.append((period, final_net_return))
-                
-                # Update performance fee calculator for shortfall tracking
-                _, shortfall = perf_calc.calculate_annual_fee(gross_period_return - mgmt_fee)
+                final_net_return = None
+                mgmt_fee = None
+                perf_fee = None
+                if not monthly_net_returns.empty and period in period_windows:
+                    start_date, end_date = period_windows[period]
+                    period_months = monthly_net_returns['period'].dt.to_timestamp('M')
+                    mask = (period_months >= pd.to_datetime(start_date)) & (period_months <= pd.to_datetime(end_date))
+                    period_net_returns = monthly_net_returns.loc[mask, 'net_return']
+                    if not period_net_returns.empty:
+                        final_net_return = float((1 + period_net_returns).prod() - 1)
+
+                if final_net_return is None:
+                    num_quarters = 4
+                    if '_ytd' in period:
+                        num_quarters = max(1, datetime.now().month // 3)
+
+                    fee_result = calculate_period_net_return(
+                        gross_return=gross_period_return,
+                        quarterly_mgmt_fee=quarterly_mgmt_fee,
+                        quarterly_hurdle=quarterly_hurdle,
+                        perf_fee_rate=perf_fee_rate,
+                        num_quarters=num_quarters,
+                        high_water_mark_ratio=1.0
+                    )
+
+                    final_net_return = fee_result['net_return']
+                    perf_fee = fee_result['perf_fee_impact']
+                    mgmt_fee = fee_result['mgmt_fee_impact']
+
+                mgmt_fee_display = 'See quarterly fee tracking'
+                perf_fee_display = 'See quarterly fee tracking'
+                if mgmt_fee is not None:
+                    mgmt_fee_display = f'{mgmt_fee:.4%}'
+                if perf_fee is not None:
+                    perf_fee_display = f'{perf_fee:.4%}' if perf_fee > 0 else 'None (below hurdle/HWM)'
                 
                 summary_data.extend([
                     {
@@ -1647,16 +1854,12 @@ def save_all_results(results: Dict, output_dir: str = 'results', config: Optiona
                         'Value': f'{final_net_return:.4%}'
                     },
                     {
-                        'Metric': f'{period_name} Management Fee',
-                        'Value': f'{mgmt_fee:.4%}'
+                        'Metric': f'{period_name} Management Fee Impact',
+                        'Value': mgmt_fee_display
                     },
                     {
-                        'Metric': f'{period_name} Performance Fee',
-                        'Value': f'{perf_fee:.4%}' if perf_fee > 0 else 'None (below hurdle)'
-                    },
-                    {
-                        'Metric': f'{period_name} Carried Shortfall',
-                        'Value': f'{shortfall:.4%}' if shortfall > 0 else 'None'
+                        'Metric': f'{period_name} Performance Fee Impact',
+                        'Value': perf_fee_display
                     },
                     {
                         'Metric': f'{period_name} Active Accounts',
@@ -1665,22 +1868,6 @@ def save_all_results(results: Dict, output_dir: str = 'results', config: Optiona
                 ])
                 # Add blank row for spacing between periods
                 summary_data.append({'Metric': '', 'Value': ''})
-        
-        # Recalculate Net TWR by compounding annual net returns
-        if annual_net_returns_list:
-            annual_net_returns_list.sort(key=lambda x: x[0])  # Sort by year
-            net_multiplier = 1.0
-            for year, net_ret in annual_net_returns_list:
-                net_multiplier *= (1 + net_ret)
-            net_absolute = net_multiplier - 1
-            net_annualized = (1 + net_absolute) ** (1 / num_years) - 1 if num_years > 0 else net_absolute
-            
-            # Update the summary data with corrected Net TWR values
-            for item in summary_data:
-                if item.get('Metric') == 'Total Absolute Return (Net TWR)':
-                    item['Value'] = f'{net_absolute:.4%}'
-                elif item.get('Metric') == 'Annualized Return (Net TWR)':
-                    item['Value'] = f'{net_annualized:.4%}'
         
         # Create summary DataFrame
         summary_df = pd.DataFrame(summary_data)
