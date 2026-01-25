@@ -4,6 +4,7 @@ from datetime import datetime
 import argparse
 from typing import Tuple, List, Dict, Optional
 import os
+import re
 import IBKR
 import Exante
 import logging
@@ -17,6 +18,198 @@ from gips_fee_tracker import (
     calculate_period_net_return,
     annual_to_monthly_fee
 )
+
+
+def _normalize_exante_client_name(filename: str) -> str:
+    base = os.path.splitext(os.path.basename(filename))[0]
+    if base.lower().startswith('exante '):
+        base = base[len('exante '):]
+    if ' -- ' in base:
+        base = base.split(' -- ', 1)[0]
+    return base
+
+
+_CURRENCY_SYMBOLS = {
+    'EUR': '€',
+    'USD': '$',
+    'GBP': '£',
+    'CHF': 'CHF ',
+    'JPY': '¥',
+}
+
+
+def _normalize_currency_code(code: Optional[str]) -> str:
+    if not code:
+        return ''
+    return str(code).strip().upper()
+
+
+def _get_report_currency(config: Optional[Config]) -> str:
+    if config is None:
+        return 'EUR'
+    base_currency = _normalize_currency_code(config.currency.base_currency) or 'EUR'
+    report_currency = _normalize_currency_code(config.currency.report_currency)
+    return report_currency or base_currency
+
+
+def _get_currency_symbol(currency_code: str) -> str:
+    code = _normalize_currency_code(currency_code)
+    return _CURRENCY_SYMBOLS.get(code, f'{code} ')
+
+
+def _find_column_case_insensitive(columns: List[str], target: str) -> Optional[str]:
+    target_lower = target.lower()
+    for col in columns:
+        if str(col).lower() == target_lower:
+            return col
+    return None
+
+
+def _select_fx_rate_column(
+    df: pd.DataFrame,
+    base_currency: str,
+    report_currency: str,
+    preferred: Optional[str] = None
+) -> Tuple[str, bool]:
+    columns = [str(col) for col in df.columns]
+    base = _normalize_currency_code(base_currency)
+    report = _normalize_currency_code(report_currency)
+    direct = f'{base}/{report}'
+    inverse = f'{report}/{base}'
+
+    def normalize(col: str) -> str:
+        return re.sub(r'[^A-Za-z/]', '', col).upper()
+
+    if preferred:
+        preferred_match = preferred if preferred in columns else _find_column_case_insensitive(columns, preferred)
+        if preferred_match:
+            norm = normalize(preferred_match)
+            if inverse in norm:
+                return preferred_match, True
+            return preferred_match, False
+
+    for col in columns:
+        norm = normalize(col)
+        if direct in norm:
+            return col, False
+        if inverse in norm:
+            return col, True
+
+    raise ValueError(
+        f"Could not find FX rate column for {report}/{base}. "
+        f"Available columns: {columns}"
+    )
+
+
+def _load_fx_rates(config: Optional[Config]) -> Optional[pd.DataFrame]:
+    if config is None:
+        return None
+
+    base_currency = _normalize_currency_code(config.currency.base_currency) or 'EUR'
+    report_currency = _normalize_currency_code(config.currency.report_currency) or base_currency
+    if report_currency == base_currency:
+        return None
+
+    fx_file = config.currency.fx_rates_file
+    if not fx_file:
+        raise ValueError(
+            f"FX rates file is required to report in {report_currency} when base is {base_currency}."
+        )
+
+    sheet = config.currency.fx_rates_sheet if config.currency.fx_rates_sheet else 0
+    fx_df = pd.read_excel(fx_file, sheet_name=sheet)
+    if fx_df.empty:
+        raise ValueError(f"FX rates sheet is empty: {fx_file}")
+
+    date_col = config.currency.fx_date_column or 'TIME_PERIOD'
+    if date_col not in fx_df.columns:
+        date_col = _find_column_case_insensitive(list(fx_df.columns), date_col) or date_col
+    if date_col not in fx_df.columns:
+        raise ValueError(f"FX date column '{date_col}' not found in {fx_file}")
+
+    rate_col, invert = _select_fx_rate_column(
+        fx_df,
+        base_currency=base_currency,
+        report_currency=report_currency,
+        preferred=config.currency.fx_rate_column
+    )
+
+    fx_df = fx_df[[date_col, rate_col]].copy()
+    fx_df = fx_df.rename(columns={date_col: 'Date', rate_col: 'Rate'})
+    fx_df['Date'] = pd.to_datetime(fx_df['Date'], errors='coerce').dt.normalize()
+    fx_df['Rate'] = pd.to_numeric(fx_df['Rate'], errors='coerce')
+    fx_df = fx_df.dropna(subset=['Date', 'Rate']).sort_values('Date')
+    fx_df = fx_df.drop_duplicates(subset=['Date'], keep='last')
+
+    if invert:
+        fx_df['Rate'] = fx_df['Rate'].rdiv(1.0)
+
+    return fx_df
+
+
+def _apply_fx_rates(
+    nav_df: pd.DataFrame,
+    trades_df: pd.DataFrame,
+    fx_rates: pd.DataFrame,
+    flow_columns: List[str]
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    if fx_rates is None or fx_rates.empty:
+        return nav_df, trades_df
+
+    nav_df = nav_df.copy()
+    nav_df['Date'] = pd.to_datetime(nav_df['Date'], errors='coerce').dt.normalize()
+    nav_df = nav_df.sort_values('Date')
+    nav_df = pd.merge_asof(nav_df, fx_rates, on='Date', direction='backward')
+    missing_nav_rates = nav_df['Rate'].isna().sum()
+    if missing_nav_rates:
+        logging.warning(f"Missing FX rates for {missing_nav_rates} NAV rows.")
+    nav_df['Net Asset Value'] = pd.to_numeric(nav_df['Net Asset Value'], errors='coerce') * nav_df['Rate']
+    nav_df = nav_df.drop(columns=['Rate'])
+
+    if trades_df is None or trades_df.empty:
+        return nav_df, trades_df
+
+    trades_df = trades_df.copy()
+    trades_df['When'] = pd.to_datetime(trades_df['When'], errors='coerce').dt.normalize()
+    trades_df = trades_df.sort_values('When')
+    trades_df = pd.merge_asof(
+        trades_df,
+        fx_rates.rename(columns={'Date': 'When'}),
+        on='When',
+        direction='backward'
+    )
+    missing_trade_rates = trades_df['Rate'].isna().sum()
+    if missing_trade_rates:
+        logging.warning(f"Missing FX rates for {missing_trade_rates} flow rows.")
+
+    for col in flow_columns:
+        if col in trades_df.columns:
+            trades_df[col] = pd.to_numeric(trades_df[col], errors='coerce') * trades_df['Rate']
+
+    trades_df = trades_df.drop(columns=['Rate'], errors='ignore')
+    return nav_df, trades_df
+
+
+def _group_exante_files(input_path: str) -> Dict[str, Dict[str, List[str]]]:
+    grouped: Dict[str, Dict[str, List[str]]] = {}
+    def _exante_sort_key(filename: str) -> tuple:
+        base = os.path.splitext(os.path.basename(filename))[0]
+        range_part = ''
+        if ' -- ' in base:
+            range_part = base.split(' -- ', 1)[1]
+        is_inception = range_part.lower().startswith('inception')
+        return (0 if is_inception else 1, range_part.lower())
+
+    for file in sorted(os.listdir(input_path), key=_exante_sort_key):
+        if not file.endswith('.csv'):
+            continue
+        client = _normalize_exante_client_name(file)
+        csv_path = os.path.join(input_path, file)
+        output_dir = os.path.join(input_path, os.path.splitext(file)[0])
+        entry = grouped.setdefault(client, {'source_csv': [], 'output_dir': []})
+        entry['source_csv'].append(csv_path)
+        entry['output_dir'].append(output_dir)
+    return grouped
 
 
 def get_period_windows(config: Optional[Config] = None) -> Dict[str, Tuple[str, str]]:
@@ -70,6 +263,9 @@ class ReturnsCalculator:
         self.config = load_config(config_path)
         self.input_path = input_path or self.config.paths.input_dir
         self.output_path = self.config.paths.output_dir
+        self.report_currency = _get_report_currency(self.config)
+        self.currency_symbol = _get_currency_symbol(self.report_currency)
+        self.fx_rates = _load_fx_rates(self.config)
         
         # State
         self.brokerages: Dict[str, Dict] = {}
@@ -104,16 +300,21 @@ class ReturnsCalculator:
             brokerage_input_path = os.path.join(self.input_path, brokerage_name)
             
             if os.path.exists(brokerage_input_path):
-                for file in os.listdir(brokerage_input_path):
-                    if file.endswith('.csv'):
-                        client = os.path.splitext(file)[0]
-                        csv_path = os.path.join(brokerage_input_path, file)
-                        client_dir = os.path.join(brokerage_input_path, client)
-                        self.brokerages[brokerage_name][client] = {
-                            'source_csv': csv_path,
-                            'output_dir': client_dir
-                        }
-            
+                if brokerage_name == 'Exante':
+                    self.brokerages[brokerage_name].update(
+                        _group_exante_files(brokerage_input_path)
+                    )
+                else:
+                    for file in os.listdir(brokerage_input_path):
+                        if file.endswith('.csv'):
+                            client = os.path.splitext(file)[0]
+                            csv_path = os.path.join(brokerage_input_path, file)
+                            client_dir = os.path.join(brokerage_input_path, client)
+                            self.brokerages[brokerage_name][client] = {
+                                'source_csv': csv_path,
+                                'output_dir': client_dir
+                            }
+
             if len(self.brokerages[brokerage_name]):
                 print(f"Found {len(self.brokerages[brokerage_name])} {brokerage_name} accounts")
     
@@ -134,10 +335,22 @@ class ReturnsCalculator:
         for client, files in self.brokerages[broker_name].items():
             try:
                 print(f"Processing {broker_name} data for {client}...")
-                process_func(files['source_csv'])
+                source_csv = files['source_csv']
+                if isinstance(source_csv, (list, tuple)):
+                    for csv_path in source_csv:
+                        process_func(csv_path)
+                else:
+                    process_func(source_csv)
 
                 # Processing logic
                 nav_df, trades_df = read_data_func(files['output_dir'])
+                if self.fx_rates is not None:
+                    nav_df, trades_df = _apply_fx_rates(
+                        nav_df,
+                        trades_df,
+                        self.fx_rates,
+                        self.config.currency.flow_columns
+                    )
                 sub_period_returns = calculate_sub_period_returns(
                     nav_df, trades_df, 
                     large_flow_threshold=large_flow_threshold
@@ -172,11 +385,11 @@ class ReturnsCalculator:
     
     def aggregate_returns(self):
         """Aggregate client returns into composite."""
-        aggregate_client_returns(self.all_client_returns, self.all_results)
+        aggregate_client_returns(self.all_client_returns, self.all_results, config=self.config)
     
     def save_results(self):
         """Save all results to output directory."""
-        save_all_results(self.all_results, self.output_path)
+        save_all_results(self.all_results, self.output_path, config=self.config)
     
     def run(self):
         """Run the full returns calculation pipeline."""
@@ -202,15 +415,24 @@ def scan_for_accounts():
     for brokerage in brokerages:
         input_path = os.path.join(args.input_path, brokerage)
         if os.path.exists(input_path):
-            for file in os.listdir(input_path):
-                if file.endswith('.csv'):
-                    client = os.path.splitext(file)[0]
-                    csv_path = os.path.join(input_path, file)
-                    client_dir = os.path.join(input_path, client)
-                    brokerages[brokerage][client] = {
-                        'source_csv': csv_path,
-                        'output_dir': client_dir
-                    }
+            if brokerage == 'Exante':
+                brokerages[brokerage].update(_group_exante_files(input_path))
+            else:
+                for file in os.listdir(input_path):
+                    if file.endswith('.csv'):
+                        client = os.path.splitext(file)[0]
+                        csv_path = os.path.join(input_path, file)
+                        client_dir = os.path.join(input_path, client)
+                        brokerages[brokerage][client] = {
+                            'source_csv': csv_path,
+                            'output_dir': client_dir
+                        }
+
+        _add_manual_brokerage_accounts(
+            brokerage,
+            input_path,
+            brokerages[brokerage]
+        )
         if len(brokerages[brokerage]):
             print(f"Found {len(brokerages[brokerage])} {brokerage} accounts")
 
@@ -222,7 +444,12 @@ def process_brokerage(broker_name, process, read_data):
     for client, files in brokerages[broker_name].items():
         try:
             print(f"Processing {broker_name} data for {client}...")
-            process(files['source_csv'])
+            source_csv = files['source_csv']
+            if isinstance(source_csv, (list, tuple)):
+                for csv_path in source_csv:
+                    process(csv_path)
+            else:
+                process(source_csv)
 
             # Processing logic
             nav_df, trades_df = read_data(files['output_dir'])
@@ -302,10 +529,6 @@ def calculate_sub_period_returns(
             logging.warning(f"Missing NAV data for period {start_date} to {end_date}")
             continue
         
-        if start_nav <= 0:
-            logging.warning(f"Invalid starting NAV ({start_nav}) for period {start_date}")
-            continue
-            
         # Get flows for period using flow_utils
         period_flows = flow_utils.get_flows_for_period(
             trades_with_flags, start_date, end_date, date_column='When'
@@ -321,7 +544,29 @@ def calculate_sub_period_returns(
         if not period_flows.empty and 'large_flow_flag' in period_flows.columns:
             has_large_flow = period_flows['large_flow_flag'].any()
         
-        sub_period_return = (end_nav - start_nav - total_flow) / start_nav if start_nav != 0 else 0
+        if start_nav <= 0:
+            if start_nav == 0:
+                if end_nav == 0 and total_flow == 0:
+                    sub_period_return = 0.0
+                elif total_flow != 0:
+                    if total_flow > 0:
+                        sub_period_return = (end_nav - total_flow) / total_flow
+                        logging.info(
+                            f"Computed return using flow as base for zero NAV period {start_date} to {end_date}"
+                        )
+                    else:
+                        logging.warning(
+                            f"Negative or zero flow with zero NAV for period {start_date} to {end_date}; skipping"
+                        )
+                        continue
+                else:
+                    logging.warning(f"Zero NAV with no flow for period {start_date} to {end_date}; skipping")
+                    continue
+            else:
+                logging.warning(f"Invalid starting NAV ({start_nav}) for period {start_date}")
+                continue
+        else:
+            sub_period_return = (end_nav - start_nav - total_flow) / start_nav
 
         returns.append({
             'start_date': start_date,
@@ -488,9 +733,15 @@ def calculate_total_returns_from_subperiods(sub_period_returns: pd.DataFrame) ->
     start_dt = pd.to_datetime(sub_period_returns['start_date']).min()
     end_dt = pd.to_datetime(sub_period_returns['end_date']).max()
     elapsed_years = max((end_dt - start_dt).days, 0) / 365.25
-    if elapsed_years > 0:
-        annualized_return = (1 + absolute_return) ** (1 / elapsed_years) - 1
+    base = 1 + absolute_return
+    if elapsed_years > 0 and base > 0:
+        annualized_return = base ** (1 / elapsed_years) - 1
     else:
+        if elapsed_years > 0 and base <= 0:
+            logging.warning(
+                "Annualized return undefined for total return <= -100%; "
+                "using absolute return instead."
+            )
         annualized_return = absolute_return
 
     return absolute_return, float(annualized_return)
@@ -512,15 +763,25 @@ def calculate_total_returns_from_daily(daily_returns: pd.DataFrame) -> Tuple[flo
     start_dt = pd.to_datetime(valid['date']).min()
     end_dt = pd.to_datetime(valid['date']).max()
     elapsed_years = max((end_dt - start_dt).days, 0) / 365.25
-    if elapsed_years > 0:
-        annualized_return = (1 + absolute_return) ** (1 / elapsed_years) - 1
+    base = 1 + absolute_return
+    if elapsed_years > 0 and base > 0:
+        annualized_return = base ** (1 / elapsed_years) - 1
     else:
+        if elapsed_years > 0 and base <= 0:
+            logging.warning(
+                "Annualized return undefined for total return <= -100%; "
+                "using absolute return instead."
+            )
         annualized_return = absolute_return
 
     return absolute_return, float(annualized_return)
 
 
-def aggregate_client_returns(client_returns: List[Dict], results_dict: Optional[Dict] = None):
+def aggregate_client_returns(
+    client_returns: List[Dict],
+    results_dict: Optional[Dict] = None,
+    config: Optional[Config] = None
+):
     """
     Aggregate returns across multiple accounts using daily sub-period series.
     - Build a composite daily series by summing start/end NAV and flows, then
@@ -581,7 +842,7 @@ def aggregate_client_returns(client_returns: List[Dict], results_dict: Optional[
     composite_df_for_periods['date'] = pd.to_datetime(composite_df_for_periods['month'].astype(str))
 
     # Use config-driven period windows
-    period_windows = get_period_windows()
+    period_windows = get_period_windows(config)
     period_returns: Dict = {}
     for label, (start_s, end_s) in period_windows.items():
         period_df = composite_df_for_periods[(composite_df_for_periods['date'] >= start_s) & (composite_df_for_periods['date'] <= end_s)]
@@ -910,7 +1171,11 @@ def calculate_composite_dispersion(
     return calculate_internal_dispersion(period_returns, period_navs, min_accounts)
 
 
-def build_synthetic_composite(nav_dfs: Dict[str, pd.DataFrame], flow_dfs: Dict[str, pd.DataFrame]) -> pd.DataFrame:
+def build_synthetic_composite(
+    nav_dfs: Dict[str, pd.DataFrame],
+    flow_dfs: Dict[str, pd.DataFrame],
+    flow_columns: Optional[List[str]] = None
+) -> pd.DataFrame:
     """
     Build a synthetic composite using daily values derived from NAV snapshots and flows.
     Steps:
@@ -928,7 +1193,7 @@ def build_synthetic_composite(nav_dfs: Dict[str, pd.DataFrame], flow_dfs: Dict[s
     daily_by_account: Dict[str, pd.DataFrame] = {}
     for name, nav in nav_dfs.items():
         flows = flow_dfs.get(name, pd.DataFrame(columns=['When', 'EUR equivalent']))
-        daily_by_account[name] = build_account_daily_from_nav_flows(nav, flows)
+        daily_by_account[name] = build_account_daily_from_nav_flows(nav, flows, flow_columns=flow_columns)
 
     # Build composite daily
     composite_daily = build_daily_composite(daily_by_account)
@@ -944,7 +1209,11 @@ def build_synthetic_composite(nav_dfs: Dict[str, pd.DataFrame], flow_dfs: Dict[s
     return pd.DataFrame(monthly_rows)
 
 
-def build_account_daily_from_nav_flows(nav_df: pd.DataFrame, flow_df: pd.DataFrame) -> pd.DataFrame:
+def build_account_daily_from_nav_flows(
+    nav_df: pd.DataFrame,
+    flow_df: pd.DataFrame,
+    flow_columns: Optional[List[str]] = None
+) -> pd.DataFrame:
     """
     Construct a daily series for a single account from NAV snapshots and flows.
     For each day in the continuous range between min(Date, When) and max(Date, When):
@@ -963,7 +1232,11 @@ def build_account_daily_from_nav_flows(nav_df: pd.DataFrame, flow_df: pd.DataFra
     if isinstance(flow_df, pd.DataFrame) and not flow_df.empty:
         f = flow_df.copy()
         f['When'] = pd.to_datetime(f['When']).dt.normalize()
-        flows_by_day = f.groupby('When')['EUR equivalent'].sum().to_dict()
+        try:
+            flow_col = flow_utils.get_flow_column(f, flow_columns)
+            flows_by_day = f.groupby('When')[flow_col].sum().to_dict()
+        except ValueError:
+            flows_by_day = {}
         min_flow_date = f['When'].min()
         max_flow_date = f['When'].max()
     else:
@@ -1010,6 +1283,14 @@ def save_all_results(results: Dict, output_dir: str = 'results', config: Optiona
             config = load_config()
         except Exception:
             config = None
+
+    report_currency = _get_report_currency(config)
+    currency_symbol = _get_currency_symbol(report_currency)
+
+    def fmt_currency(val: Optional[float]) -> str:
+        if val is None or not np.isfinite(val):
+            return ''
+        return f'{currency_symbol}{val:,.2f}'
     
     # Get fee rates from config or use defaults
     if config is not None:
@@ -1195,11 +1476,14 @@ def save_all_results(results: Dict, output_dir: str = 'results', config: Optiona
             fee_history = fee_result.get('history', [])
             quarterly_events = fee_result.get('quarterly_events', [])
             monthly_net_returns = fee_result.get('monthly_net_returns', pd.DataFrame())
+            flow_proration_warning = fee_result.get('flow_proration_warning')
             if not monthly_net_returns.empty:
                 monthly_net_returns = monthly_net_returns.copy()
                 monthly_net_returns['period'] = pd.to_datetime(
                     dict(year=monthly_net_returns['year'], month=monthly_net_returns['month'], day=1)
                 ).dt.to_period('M')
+        else:
+            flow_proration_warning = None
 
         # Calculate gross and net returns with GIPS-compliant fee handling
         if 'return' in monthly_returns.columns and not monthly_returns.empty:
@@ -1242,13 +1526,13 @@ def save_all_results(results: Dict, output_dir: str = 'results', config: Optiona
         
         # Format NAV/flow columns as currency if they exist
         if 'nav' in monthly_returns.columns:
-            monthly_returns['nav'] = monthly_returns['nav'].map('€{:,.2f}'.format)
+            monthly_returns['nav'] = monthly_returns['nav'].map(fmt_currency)
         if 'end_of_month_nav' in monthly_returns.columns:
-            monthly_returns['end_of_month_nav'] = monthly_returns['end_of_month_nav'].map('€{:,.2f}'.format)
+            monthly_returns['end_of_month_nav'] = monthly_returns['end_of_month_nav'].map(fmt_currency)
         if 'start_of_month_nav' in monthly_returns.columns:
-            monthly_returns['start_of_month_nav'] = monthly_returns['start_of_month_nav'].map('€{:,.2f}'.format)
+            monthly_returns['start_of_month_nav'] = monthly_returns['start_of_month_nav'].map(fmt_currency)
         if 'monthly_flow' in monthly_returns.columns:
-            monthly_returns['monthly_flow'] = monthly_returns['monthly_flow'].map('€{:,.2f}'.format)
+            monthly_returns['monthly_flow'] = monthly_returns['monthly_flow'].map(fmt_currency)
         
         # Save to Excel (Monthly)
         with pd.ExcelWriter(monthly_file, engine='openpyxl') as writer:
@@ -1278,7 +1562,7 @@ def save_all_results(results: Dict, output_dir: str = 'results', config: Optiona
             # Format NAV/flow
             for col in ['start_nav', 'end_nav', 'flow']:
                 if col in daily_returns.columns:
-                    daily_returns[col] = daily_returns[col].map('€{:,.2f}'.format)
+                    daily_returns[col] = daily_returns[col].map(fmt_currency)
             with pd.ExcelWriter(daily_file, engine='openpyxl') as writer:
                 daily_returns.to_excel(writer, index=False)
                 worksheet = writer.sheets['Sheet1']
@@ -1417,36 +1701,40 @@ def save_all_results(results: Dict, output_dir: str = 'results', config: Optiona
             summary_data.append({'Metric': warning_text, 'Value': ''})
             logging.warning(warning_text)
 
-        summary_data.extend([
-            {
-                'Metric': 'Initial NAV (Actual)',
-                'Value': f'€{initial_nav_display:,.2f}'
-            },
-            {
-                'Metric': 'Final NAV - Gross (Actual from Accounts)',
-                'Value': f'€{actual_final_gross_nav:,.2f}'
-            },
-            {
-                'Metric': 'Final NAV - Net (After Fees)',
-                'Value': f'€{final_net_nav:,.2f}'
-            },
-            {
-                'Metric': 'Total Flows (In/Out)',
-                'Value': f'€{total_flows:,.2f}'
-            },
-            {
-                'Metric': 'Total Management Fees Paid',
-                'Value': f'€{total_mgmt_fees:,.2f}'
-            },
-            {
-                'Metric': 'Total Performance Fees Paid',
-                'Value': f'€{total_perf_fees:,.2f}'
-            },
-            {
-                'Metric': 'Fee Impact (Gross - Net)',
-                'Value': f'€{fee_drag:,.2f}'
-            }
-        ])
+        if flow_proration_warning:
+            summary_data.append({'Metric': flow_proration_warning, 'Value': ''})
+            logging.error(flow_proration_warning)
+
+            summary_data.extend([
+                {
+                    'Metric': 'Initial NAV (Actual)',
+                    'Value': fmt_currency(initial_nav_display)
+                },
+                {
+                    'Metric': 'Final NAV - Gross (Actual from Accounts)',
+                    'Value': fmt_currency(actual_final_gross_nav)
+                },
+                {
+                    'Metric': 'Final NAV - Net (After Fees)',
+                    'Value': fmt_currency(final_net_nav)
+                },
+                {
+                    'Metric': 'Total Flows (In/Out)',
+                    'Value': fmt_currency(total_flows)
+                },
+                {
+                    'Metric': 'Total Management Fees Paid',
+                    'Value': fmt_currency(total_mgmt_fees)
+                },
+                {
+                    'Metric': 'Total Performance Fees Paid',
+                    'Value': fmt_currency(total_perf_fees)
+                },
+                {
+                    'Metric': 'Fee Impact (Gross - Net)',
+                    'Value': fmt_currency(fee_drag)
+                }
+            ])
         
         # Add fee structure section
         summary_data.append({'Metric': '', 'Value': ''})
@@ -1500,7 +1788,8 @@ def save_all_results(results: Dict, output_dir: str = 'results', config: Optiona
                         'net_nav_after_perf': 0,
                         'high_water_mark': 0.0,
                         'cumulative_hurdle_pct': 0.0,
-                        'net_index_after': 0.0
+                        'net_index_after': 0.0,
+                        'gross_return_factor': 1.0
                     }
                 
                 if event['event'] in ('management_fee', 'management_fee_adjustment'):
@@ -1516,6 +1805,7 @@ def save_all_results(results: Dict, output_dir: str = 'results', config: Optiona
                     quarterly_actual[key]['net_nav_after_perf'] = event.get('net_nav_after', 0)
                     quarterly_actual[key]['excess_gain'] = event.get('excess_gain', 0)
                     quarterly_actual[key]['effective_hurdle'] = event.get('effective_hurdle', 0)
+                    quarterly_actual[key]['hurdle_threshold'] = event.get('hurdle_threshold', 0.0)
                     quarterly_actual[key]['high_water_mark'] = event.get('high_water_mark_after', 0.0)
                     quarterly_actual[key]['cumulative_hurdle_pct'] = event.get('accumulated_hurdle_pct', 0.0)
                     quarterly_actual[key]['net_index_after'] = event.get('net_index_after', 0.0)
@@ -1547,20 +1837,59 @@ def save_all_results(results: Dict, output_dir: str = 'results', config: Optiona
                     if key in quarterly_actual:
                         end_nav_val = row.get('end_nav', 0)
                         flow_val = row.get('flow', 0)
+                        monthly_return = row.get('return', 0)
                         if pd.notna(end_nav_val):
                             quarterly_actual[key]['end_nav_gross'] = end_nav_val
                         if pd.notna(flow_val):
                             quarterly_actual[key]['total_flows'] = quarterly_actual[key].get('total_flows', 0) + flow_val
+                        if pd.notna(monthly_return):
+                            try:
+                                monthly_return = float(monthly_return)
+                                quarterly_actual[key]['gross_return_factor'] *= (1 + monthly_return)
+                            except Exception:
+                                pass
             
             # Add initial NAV row
             summary_data.append({
                 'Metric': 'Starting NAV (Actual Combined)',
-                'Value': f'€{initial_nav_display:,.2f}'
+                'Value': fmt_currency(initial_nav_display)
             })
             summary_data.append({'Metric': '', 'Value': ''})
             
             # Display quarterly breakdown with actual NAV values
-            for key in sorted(quarterly_actual.keys()):
+            # Build ordered quarter list for sequential calculations
+            def _quarter_sort_key(k: str) -> tuple:
+                try:
+                    fy, q_part = k.split('_Q')
+                    return (int(fy), int(q_part))
+                except Exception:
+                    return (0, 0)
+
+            ordered_quarters = sorted(quarterly_actual.keys(), key=_quarter_sort_key)
+            computed_hurdles = {}
+            prev_hurdle = None
+            prev_net_index = None
+            quarterly_hurdle_rate = hurdle_rate / 4 if hurdle_rate is not None else 0.015
+
+            for key in ordered_quarters:
+                q_data = quarterly_actual[key]
+                existing = q_data.get('cumulative_hurdle_pct', 0.0) or 0.0
+                if prev_hurdle is None:
+                    current_hurdle = existing if existing > 0 else quarterly_hurdle_rate
+                else:
+                    current_hurdle = max(existing, prev_hurdle + quarterly_hurdle_rate)
+                computed_hurdles[key] = current_hurdle
+                prev_hurdle = current_hurdle
+
+                net_index_after = q_data.get('net_index_after', None)
+                if net_index_after is not None and prev_net_index is not None and prev_net_index > 0:
+                    q_data['net_return_quarter'] = (net_index_after / prev_net_index) - 1
+                else:
+                    q_data['net_return_quarter'] = None
+                if net_index_after is not None and net_index_after > 0:
+                    prev_net_index = net_index_after
+
+            for key in ordered_quarters:
                 q_data = quarterly_actual[key]
                 fy = q_data['fiscal_year']
                 q = q_data['quarter']
@@ -1594,22 +1923,22 @@ def save_all_results(results: Dict, output_dir: str = 'results', config: Optiona
                 summary_data.extend([
                     {
                         'Metric': f'{fy} Q{q} - Gross NAV (Actual)',
-                        'Value': f'€{end_nav_gross:,.2f}'
+                        'Value': fmt_currency(end_nav_gross)
                     },
                     {
                         'Metric': f'{fy} Q{q} - Flows (In/Out)',
-                        'Value': f'€{total_flows:,.2f}'
+                        'Value': fmt_currency(total_flows)
                     },
                     {
                         'Metric': f'{fy} Q{q} - Management Fee (0.25%)',
-                        'Value': f'€{q_data["mgmt_fee"]:,.2f}'
+                        'Value': fmt_currency(q_data["mgmt_fee"])
                     }
                 ])
                 
                 if q_data['perf_fee'] > 0:
                     summary_data.append({
                         'Metric': f'{fy} Q{q} - Performance Fee (25% excess)',
-                        'Value': f'€{q_data["perf_fee"]:,.2f}'
+                        'Value': fmt_currency(q_data["perf_fee"])
                     })
                 else:
                     summary_data.append({
@@ -1620,28 +1949,52 @@ def save_all_results(results: Dict, output_dir: str = 'results', config: Optiona
                 if net_nav_end > 0:
                     summary_data.append({
                         'Metric': f'{fy} Q{q} - Net NAV (After Fees)',
-                        'Value': f'€{net_nav_end:,.2f}'
+                        'Value': fmt_currency(net_nav_end)
                     })
                     # Show fee drag for the quarter
                     fee_drag_q = end_nav_gross - net_nav_end
                     if fee_drag_q > 0:
                         summary_data.append({
                             'Metric': f'{fy} Q{q} - Fee Impact (Cumulative)',
-                            'Value': f'€{fee_drag_q:,.2f}'
+                            'Value': fmt_currency(fee_drag_q)
                         })
 
                 net_index_after = q_data.get('net_index_after', None)
                 hwm_index = q_data.get('high_water_mark', None)
-                cumulative_hurdle_pct = q_data.get('cumulative_hurdle_pct', None)
+                hurdle_threshold_index = q_data.get('hurdle_threshold', None)
+                cumulative_hurdle_pct = computed_hurdles.get(key, q_data.get('cumulative_hurdle_pct', None))
+                quarter_return = q_data.get('net_return_quarter', None)
+                gross_quarter_return = None
+                gross_factor = q_data.get('gross_return_factor', None)
+                if gross_factor is not None:
+                    try:
+                        gross_quarter_return = float(gross_factor) - 1
+                    except Exception:
+                        gross_quarter_return = None
 
                 if net_index_after is not None and net_index_after > 0:
                     summary_data.append({
                         'Metric': f'{fy} Q{q} - Net Total Return to Date',
                         'Value': fmt_pct_value(net_index_after - 1)
                     })
+                if gross_quarter_return is not None:
+                    summary_data.append({
+                        'Metric': f'{fy} Q{q} - Gross Return (Quarter)',
+                        'Value': fmt_pct_value(gross_quarter_return)
+                    })
+                if quarter_return is not None:
+                    summary_data.append({
+                        'Metric': f'{fy} Q{q} - Net Return (Quarter)',
+                        'Value': fmt_pct_value(quarter_return)
+                    })
+                if hurdle_threshold_index is not None and hurdle_threshold_index > 0:
+                    summary_data.append({
+                        'Metric': f'{fy} Q{q} - High Water Mark (Hurdle-Adjusted, Net Return to Date)',
+                        'Value': fmt_pct_value(hurdle_threshold_index - 1)
+                    })
                 if hwm_index is not None and hwm_index > 0:
                     summary_data.append({
-                        'Metric': f'{fy} Q{q} - High Water Mark (Net Return to Date)',
+                        'Metric': f'{fy} Q{q} - High Water Mark (Base, Net Return to Date)',
                         'Value': fmt_pct_value(hwm_index - 1)
                     })
                 if cumulative_hurdle_pct is not None:
@@ -1669,31 +2022,31 @@ def save_all_results(results: Dict, output_dir: str = 'results', config: Optiona
                 summary_data.extend([
                     {
                         'Metric': f'{fy} - Start NAV (Actual)',
-                        'Value': f'€{a_data["start_nav"]:,.2f}' if a_data["start_nav"] else 'N/A'
+                        'Value': fmt_currency(a_data["start_nav"]) if a_data["start_nav"] else 'N/A'
                     },
                     {
                         'Metric': f'{fy} - End NAV Gross (Actual)',
-                        'Value': f'€{a_data["end_nav_gross"]:,.2f}'
+                        'Value': fmt_currency(a_data["end_nav_gross"])
                     },
                     {
                         'Metric': f'{fy} - End NAV Net (After Fees)',
-                        'Value': f'€{a_data["end_nav_net"]:,.2f}' if a_data["end_nav_net"] > 0 else 'N/A'
+                        'Value': fmt_currency(a_data["end_nav_net"]) if a_data["end_nav_net"] > 0 else 'N/A'
                     },
                     {
                         'Metric': f'{fy} - Total Flows',
-                        'Value': f'€{a_data["total_flows"]:,.2f}'
+                        'Value': fmt_currency(a_data["total_flows"])
                     },
                     {
                         'Metric': f'{fy} - Management Fees',
-                        'Value': f'€{a_data["mgmt_fee"]:,.2f}'
+                        'Value': fmt_currency(a_data["mgmt_fee"])
                     },
                     {
                         'Metric': f'{fy} - Performance Fees',
-                        'Value': f'€{a_data["perf_fee"]:,.2f}'
+                        'Value': fmt_currency(a_data["perf_fee"])
                     },
                     {
                         'Metric': f'{fy} - Total Fees',
-                        'Value': f'€{total_annual_fees:,.2f}'
+                        'Value': fmt_currency(total_annual_fees)
                     },
                     {'Metric': '', 'Value': ''}
                 ])
@@ -1703,31 +2056,31 @@ def save_all_results(results: Dict, output_dir: str = 'results', config: Optiona
             summary_data.extend([
                 {
                     'Metric': 'Total Management Fees (All Years)',
-                    'Value': f'€{cumulative_mgmt:,.2f}'
+                    'Value': fmt_currency(cumulative_mgmt)
                 },
                 {
                     'Metric': 'Total Performance Fees (All Years)',
-                    'Value': f'€{cumulative_perf:,.2f}'
+                    'Value': fmt_currency(cumulative_perf)
                 },
                 {
                     'Metric': 'Total All Fees',
-                    'Value': f'€{cumulative_mgmt + cumulative_perf:,.2f}'
+                    'Value': fmt_currency(cumulative_mgmt + cumulative_perf)
                 },
                 {
                     'Metric': 'Final NAV - Gross (Actual from Accounts)',
-                    'Value': f'€{actual_final_gross_nav:,.2f}'
+                    'Value': fmt_currency(actual_final_gross_nav)
                 },
                 {
                     'Metric': 'Final NAV - Net (After All Fees)',
-                    'Value': f'€{final_net_nav:,.2f}'
+                    'Value': fmt_currency(final_net_nav)
                 },
                 {
                     'Metric': 'Total Flows (All Years)',
-                    'Value': f'€{cumulative_flows:,.2f}'
+                    'Value': fmt_currency(cumulative_flows)
                 },
                 {
                     'Metric': 'Fee Impact (Gross - Net)',
-                    'Value': f'€{actual_final_gross_nav - final_net_nav:,.2f}'
+                    'Value': fmt_currency(actual_final_gross_nav - final_net_nav)
                 }
             ])
 
@@ -1768,20 +2121,20 @@ def save_all_results(results: Dict, output_dir: str = 'results', config: Optiona
                     'Metric': 'Net Total Return (Index-based, After Fees)',
                     'Value': fmt_pct_value(net_index_current - 1)
                 })
+            if hurdle_threshold_return is not None:
+                summary_data.append({
+                    'Metric': 'High Water Mark (Hurdle-Adjusted, Net Return to Date)',
+                    'Value': fmt_pct_value(hurdle_threshold_return)
+                })
             if hwm_index_current is not None:
                 summary_data.append({
-                    'Metric': 'High Water Mark (Net Return to Date)',
+                    'Metric': 'High Water Mark (Base, Net Return to Date)',
                     'Value': fmt_pct_value(hwm_index_current - 1)
                 })
             if cumulative_hurdle_pct_current is not None:
                 summary_data.append({
                     'Metric': 'Cumulative Hurdle (Since Inception)',
                     'Value': fmt_pct_value(cumulative_hurdle_pct_current)
-                })
-            if hurdle_threshold_return is not None:
-                summary_data.append({
-                    'Metric': 'Current Hurdle Threshold (Net Return to Date)',
-                    'Value': fmt_pct_value(hurdle_threshold_return)
                 })
         else:
             summary_data.append({
@@ -1911,10 +2264,17 @@ def main():
         if account in functions and brokerages[account]:
             process_brokerage(account, *functions[account])
 
-    # Calculate aggregate results using asset-weighted composite returns
-    aggregate_client_returns(all_client_returns)
+    config = None
+    if hasattr(args, 'config'):
+        try:
+            config = load_config(args.config)
+        except Exception:
+            config = None
 
-    save_all_results(all_results)
+    # Calculate aggregate results using asset-weighted composite returns
+    aggregate_client_returns(all_client_returns, config=config)
+
+    save_all_results(all_results, config=config)
 
     print("Returns calculation process completed")
 
