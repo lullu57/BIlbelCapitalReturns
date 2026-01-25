@@ -79,12 +79,21 @@ paths:
 # Currency settings
 currency:
   base_currency: EUR
+  # Optional reporting currency. If set and different from base_currency,
+  # daily FX conversion is applied using the configured FX rates.
+  report_currency: EUR
   # Flow column names in order of preference
   # The system will use the first matching column found
   flow_columns:
     - "Adjusted EUR"
     - "EUR equivalent"
     - "Amount"
+  # FX rates configuration (required when report_currency != base_currency)
+  fx_rates_file: null
+  fx_rates_sheet: null
+  fx_date_column: "TIME_PERIOD"
+  fx_rate_column: null
+  fx_fill_method: "ffill"
 
 # Brokerage-specific settings
 # These define how to parse data from each brokerage's files
