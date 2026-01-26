@@ -343,7 +343,33 @@ class ReturnsCalculator:
                     process_func(source_csv)
 
                 # Processing logic
-                nav_df, trades_df = read_data_func(files['output_dir'])
+                output_dir = files['output_dir']
+                if isinstance(output_dir, (list, tuple)):
+                    # Exante can provide multiple output folders (one per CSV range).
+                    # Merge them into a single NAV/flow set before return calculations.
+                    nav_frames = []
+                    trade_frames = []
+                    for out_dir in output_dir:
+                        nav_part, trade_part = read_data_func(out_dir)
+                        if isinstance(nav_part, pd.DataFrame) and not nav_part.empty:
+                            nav_frames.append(nav_part)
+                        if isinstance(trade_part, pd.DataFrame) and not trade_part.empty:
+                            trade_frames.append(trade_part)
+                    if nav_frames:
+                        nav_df = pd.concat(nav_frames, ignore_index=True)
+                        # If overlapping dates exist, keep the last entry per date.
+                        nav_df['Date'] = pd.to_datetime(nav_df['Date']).dt.normalize()
+                        nav_df = nav_df.sort_values('Date').drop_duplicates(subset=['Date'], keep='last')
+                    else:
+                        nav_df = pd.DataFrame(columns=['Date', 'Net Asset Value'])
+                    if trade_frames:
+                        trades_df = pd.concat(trade_frames, ignore_index=True)
+                        trades_df['When'] = pd.to_datetime(trades_df['When']).dt.normalize()
+                        trades_df = trades_df.sort_values('When').drop_duplicates()
+                    else:
+                        trades_df = pd.DataFrame(columns=['When', 'Operation type', 'EUR equivalent'])
+                else:
+                    nav_df, trades_df = read_data_func(output_dir)
                 if self.fx_rates is not None:
                     nav_df, trades_df = _apply_fx_rates(
                         nav_df,
@@ -452,7 +478,30 @@ def process_brokerage(broker_name, process, read_data):
                 process(source_csv)
 
             # Processing logic
-            nav_df, trades_df = read_data(files['output_dir'])
+            output_dir = files['output_dir']
+            if isinstance(output_dir, (list, tuple)):
+                nav_frames = []
+                trade_frames = []
+                for out_dir in output_dir:
+                    nav_part, trade_part = read_data(out_dir)
+                    if isinstance(nav_part, pd.DataFrame) and not nav_part.empty:
+                        nav_frames.append(nav_part)
+                    if isinstance(trade_part, pd.DataFrame) and not trade_part.empty:
+                        trade_frames.append(trade_part)
+                if nav_frames:
+                    nav_df = pd.concat(nav_frames, ignore_index=True)
+                    nav_df['Date'] = pd.to_datetime(nav_df['Date']).dt.normalize()
+                    nav_df = nav_df.sort_values('Date').drop_duplicates(subset=['Date'], keep='last')
+                else:
+                    nav_df = pd.DataFrame(columns=['Date', 'Net Asset Value'])
+                if trade_frames:
+                    trades_df = pd.concat(trade_frames, ignore_index=True)
+                    trades_df['When'] = pd.to_datetime(trades_df['When']).dt.normalize()
+                    trades_df = trades_df.sort_values('When').drop_duplicates()
+                else:
+                    trades_df = pd.DataFrame(columns=['When', 'Operation type', 'EUR equivalent'])
+            else:
+                nav_df, trades_df = read_data(output_dir)
             sub_period_returns = calculate_sub_period_returns(nav_df, trades_df)
             monthly_returns = calculate_monthly_twr(sub_period_returns)
             # Build daily series directly from NAV and flows to mirror reference TWR
@@ -1707,36 +1756,38 @@ def save_all_results(results: Dict, output_dir: str = 'results', config: Optiona
             summary_data.append({'Metric': flow_proration_warning, 'Value': ''})
             logging.error(flow_proration_warning)
 
-            summary_data.extend([
-                {
-                    'Metric': 'Initial NAV (Actual)',
-                    'Value': fmt_currency(initial_nav_display)
-                },
-                {
-                    'Metric': 'Final NAV - Gross (Actual from Accounts)',
-                    'Value': fmt_currency(actual_final_gross_nav)
-                },
-                {
-                    'Metric': 'Final NAV - Net (After Fees)',
-                    'Value': fmt_currency(final_net_nav)
-                },
-                {
-                    'Metric': 'Total Flows (In/Out)',
-                    'Value': fmt_currency(total_flows)
-                },
-                {
-                    'Metric': 'Total Management Fees Paid',
-                    'Value': fmt_currency(total_mgmt_fees)
-                },
-                {
-                    'Metric': 'Total Performance Fees Paid',
-                    'Value': fmt_currency(total_perf_fees)
-                },
-                {
-                    'Metric': 'Fee Impact (Gross - Net)',
-                    'Value': fmt_currency(fee_drag)
-                }
-            ])
+        # Always include NAV/fee summary metrics (critical for interpretation),
+        # regardless of warning state.
+        summary_data.extend([
+            {
+                'Metric': 'Initial NAV (Actual)',
+                'Value': fmt_currency(initial_nav_display)
+            },
+            {
+                'Metric': 'Final NAV - Gross (Actual from Accounts)',
+                'Value': fmt_currency(actual_final_gross_nav)
+            },
+            {
+                'Metric': 'Final NAV - Net (After Fees)',
+                'Value': fmt_currency(final_net_nav)
+            },
+            {
+                'Metric': 'Total Flows (In/Out)',
+                'Value': fmt_currency(total_flows)
+            },
+            {
+                'Metric': 'Total Management Fees Paid',
+                'Value': fmt_currency(total_mgmt_fees)
+            },
+            {
+                'Metric': 'Total Performance Fees Paid',
+                'Value': fmt_currency(total_perf_fees)
+            },
+            {
+                'Metric': 'Fee Impact (Gross - Net)',
+                'Value': fmt_currency(fee_drag)
+            }
+        ])
         
         # Add fee structure section
         summary_data.append({'Metric': '', 'Value': ''})
