@@ -376,7 +376,9 @@ class ReturnsCalculator:
                         trades_df = trades_df.sort_values(
                             ['When', '_source_order'],
                             kind='mergesort'
-                        ).drop_duplicates()
+                        )
+                        trade_dedupe_cols = [c for c in trades_df.columns if c != '_source_order']
+                        trades_df = trades_df.drop_duplicates(subset=trade_dedupe_cols)
                         trades_df = trades_df.drop(columns=['_source_order'], errors='ignore')
                     else:
                         trades_df = pd.DataFrame(columns=['When', 'Operation type', 'EUR equivalent'])
@@ -520,7 +522,9 @@ def process_brokerage(broker_name, process, read_data):
                     trades_df = trades_df.sort_values(
                         ['When', '_source_order'],
                         kind='mergesort'
-                    ).drop_duplicates()
+                    )
+                    trade_dedupe_cols = [c for c in trades_df.columns if c != '_source_order']
+                    trades_df = trades_df.drop_duplicates(subset=trade_dedupe_cols)
                     trades_df = trades_df.drop(columns=['_source_order'], errors='ignore')
                 else:
                     trades_df = pd.DataFrame(columns=['When', 'Operation type', 'EUR equivalent'])
