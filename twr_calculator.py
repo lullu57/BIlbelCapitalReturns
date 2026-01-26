@@ -349,23 +349,35 @@ class ReturnsCalculator:
                     # Merge them into a single NAV/flow set before return calculations.
                     nav_frames = []
                     trade_frames = []
-                    for out_dir in output_dir:
+                    for source_idx, out_dir in enumerate(output_dir):
                         nav_part, trade_part = read_data_func(out_dir)
                         if isinstance(nav_part, pd.DataFrame) and not nav_part.empty:
+                            nav_part = nav_part.copy()
+                            nav_part['_source_order'] = source_idx
                             nav_frames.append(nav_part)
                         if isinstance(trade_part, pd.DataFrame) and not trade_part.empty:
+                            trade_part = trade_part.copy()
+                            trade_part['_source_order'] = source_idx
                             trade_frames.append(trade_part)
                     if nav_frames:
                         nav_df = pd.concat(nav_frames, ignore_index=True)
                         # If overlapping dates exist, keep the last entry per date.
                         nav_df['Date'] = pd.to_datetime(nav_df['Date']).dt.normalize()
-                        nav_df = nav_df.sort_values('Date').drop_duplicates(subset=['Date'], keep='last')
+                        nav_df = nav_df.sort_values(
+                            ['Date', '_source_order'],
+                            kind='mergesort'
+                        ).drop_duplicates(subset=['Date'], keep='last')
+                        nav_df = nav_df.drop(columns=['_source_order'], errors='ignore')
                     else:
                         nav_df = pd.DataFrame(columns=['Date', 'Net Asset Value'])
                     if trade_frames:
                         trades_df = pd.concat(trade_frames, ignore_index=True)
                         trades_df['When'] = pd.to_datetime(trades_df['When']).dt.normalize()
-                        trades_df = trades_df.sort_values('When').drop_duplicates()
+                        trades_df = trades_df.sort_values(
+                            ['When', '_source_order'],
+                            kind='mergesort'
+                        ).drop_duplicates()
+                        trades_df = trades_df.drop(columns=['_source_order'], errors='ignore')
                     else:
                         trades_df = pd.DataFrame(columns=['When', 'Operation type', 'EUR equivalent'])
                 else:
@@ -482,22 +494,34 @@ def process_brokerage(broker_name, process, read_data):
             if isinstance(output_dir, (list, tuple)):
                 nav_frames = []
                 trade_frames = []
-                for out_dir in output_dir:
+                for source_idx, out_dir in enumerate(output_dir):
                     nav_part, trade_part = read_data(out_dir)
                     if isinstance(nav_part, pd.DataFrame) and not nav_part.empty:
+                        nav_part = nav_part.copy()
+                        nav_part['_source_order'] = source_idx
                         nav_frames.append(nav_part)
                     if isinstance(trade_part, pd.DataFrame) and not trade_part.empty:
+                        trade_part = trade_part.copy()
+                        trade_part['_source_order'] = source_idx
                         trade_frames.append(trade_part)
                 if nav_frames:
                     nav_df = pd.concat(nav_frames, ignore_index=True)
                     nav_df['Date'] = pd.to_datetime(nav_df['Date']).dt.normalize()
-                    nav_df = nav_df.sort_values('Date').drop_duplicates(subset=['Date'], keep='last')
+                    nav_df = nav_df.sort_values(
+                        ['Date', '_source_order'],
+                        kind='mergesort'
+                    ).drop_duplicates(subset=['Date'], keep='last')
+                    nav_df = nav_df.drop(columns=['_source_order'], errors='ignore')
                 else:
                     nav_df = pd.DataFrame(columns=['Date', 'Net Asset Value'])
                 if trade_frames:
                     trades_df = pd.concat(trade_frames, ignore_index=True)
                     trades_df['When'] = pd.to_datetime(trades_df['When']).dt.normalize()
-                    trades_df = trades_df.sort_values('When').drop_duplicates()
+                    trades_df = trades_df.sort_values(
+                        ['When', '_source_order'],
+                        kind='mergesort'
+                    ).drop_duplicates()
+                    trades_df = trades_df.drop(columns=['_source_order'], errors='ignore')
                 else:
                     trades_df = pd.DataFrame(columns=['When', 'Operation type', 'EUR equivalent'])
             else:
