@@ -213,8 +213,9 @@ def _parse_config(raw: dict) -> Config:
     
     # Parse periods
     periods_raw = raw.get('periods', {})
+    # Default to January to keep parsing consistent with PeriodsConfig defaults.
     periods = PeriodsConfig(
-        fiscal_year_start_month=periods_raw.get('fiscal_year_start_month', 2),
+        fiscal_year_start_month=periods_raw.get('fiscal_year_start_month', 1),
         reporting_years=periods_raw.get('reporting_years', [2022, 2023, 2024, 2025]),
     )
     
