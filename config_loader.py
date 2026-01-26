@@ -59,7 +59,8 @@ class ThresholdsConfig:
 @dataclass
 class PeriodsConfig:
     """Reporting periods configuration."""
-    fiscal_year_start_month: int = 2  # February
+    # Default fiscal year starts in January to match calendar-year reporting.
+    fiscal_year_start_month: int = 1  # January
     reporting_years: List[int] = field(default_factory=lambda: [2022, 2023, 2024, 2025])
     
     def get_period_windows(self) -> Dict[str, Tuple[str, str]]:

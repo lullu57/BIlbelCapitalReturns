@@ -1440,7 +1440,8 @@ def save_all_results(results: Dict, output_dir: str = 'results', config: Optiona
             initial_nav_display = initial_nav
 
         # Run fee tracker if we have monthly data with NAV/flows
-        fiscal_year_start_month = 2  # Default to February
+        # Default fiscal year starts in January (calendar year) unless config overrides.
+        fiscal_year_start_month = 1
         quarterly_mgmt_fee = 0.0025  # 0.25% per quarter
         quarterly_hurdle = 0.015     # 1.5% per quarter
         if config is not None:
@@ -1587,7 +1588,8 @@ def save_all_results(results: Dict, output_dir: str = 'results', config: Optiona
             quarterly_mgmt_fee = config.fees.management_fee_quarterly
         
         # Get fiscal year start month
-        fiscal_year_start_month = 2  # Default February
+        # Default fiscal year starts in January (calendar year) unless config overrides.
+        fiscal_year_start_month = 1
         if config is not None:
             fiscal_year_start_month = config.periods.fiscal_year_start_month
         
