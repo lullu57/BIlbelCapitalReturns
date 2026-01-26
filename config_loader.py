@@ -59,7 +59,8 @@ class ThresholdsConfig:
 @dataclass
 class PeriodsConfig:
     """Reporting periods configuration."""
-    fiscal_year_start_month: int = 2  # February
+    # Default fiscal year starts in January to match calendar-year reporting.
+    fiscal_year_start_month: int = 1  # January
     reporting_years: List[int] = field(default_factory=lambda: [2022, 2023, 2024, 2025])
     
     def get_period_windows(self) -> Dict[str, Tuple[str, str]]:
@@ -117,7 +118,13 @@ class PathsConfig:
 class CurrencyConfig:
     """Currency configuration."""
     base_currency: str = 'EUR'
+    report_currency: Optional[str] = None
     flow_columns: List[str] = field(default_factory=lambda: ['Adjusted EUR', 'EUR equivalent'])
+    fx_rates_file: Optional[str] = None
+    fx_rates_sheet: Optional[str] = None
+    fx_date_column: str = 'TIME_PERIOD'
+    fx_rate_column: Optional[str] = None
+    fx_fill_method: str = 'ffill'
 
 
 @dataclass
@@ -223,7 +230,13 @@ def _parse_config(raw: dict) -> Config:
     currency_raw = raw.get('currency', {})
     currency = CurrencyConfig(
         base_currency=currency_raw.get('base_currency', 'EUR'),
+        report_currency=currency_raw.get('report_currency'),
         flow_columns=currency_raw.get('flow_columns', ['Adjusted EUR', 'EUR equivalent']),
+        fx_rates_file=currency_raw.get('fx_rates_file'),
+        fx_rates_sheet=currency_raw.get('fx_rates_sheet'),
+        fx_date_column=currency_raw.get('fx_date_column', 'TIME_PERIOD'),
+        fx_rate_column=currency_raw.get('fx_rate_column'),
+        fx_fill_method=currency_raw.get('fx_fill_method', 'ffill'),
     )
     
     return Config(

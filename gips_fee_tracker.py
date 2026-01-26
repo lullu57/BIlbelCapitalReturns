@@ -55,14 +55,14 @@ def annual_to_monthly_fee(annual_rate: float) -> float:
     return (1 + annual_rate) ** (1/12) - 1
 
 
-def get_quarter_dates(year: int, quarter: int, fiscal_year_start_month: int = 2) -> Tuple[date, date, int]:
+def get_quarter_dates(year: int, quarter: int, fiscal_year_start_month: int = 1) -> Tuple[date, date, int]:
     """
     Get the start date, end date, and number of days for a fiscal quarter.
     
     Args:
         year: Calendar year
         quarter: Fiscal quarter (1-4)
-        fiscal_year_start_month: Month when fiscal year starts (default 2 = February)
+        fiscal_year_start_month: Month when fiscal year starts (default 1 = January)
     
     Returns:
         Tuple of (start_date, end_date, days_in_quarter)
@@ -122,13 +122,14 @@ class GIPSFeeTracker:
         quarterly_mgmt_fee: Management fee rate per quarter (default 0.25%)
         quarterly_hurdle_rate: Quarterly hurdle rate (default 1.5%)
         perf_fee_rate: Performance fee rate (default 25%)
-        fiscal_year_start_month: Month when fiscal year starts (default 2 = February)
+        fiscal_year_start_month: Month when fiscal year starts (default 1 = January)
     """
     initial_nav: float
     quarterly_mgmt_fee: float = 0.0025  # 0.25% per quarter
     quarterly_hurdle_rate: float = 0.015  # 1.5% per quarter
     perf_fee_rate: float = 0.25  # 25% of excess
-    fiscal_year_start_month: int = 2  # February
+    # Default fiscal year starts in January to align with calendar-year reporting.
+    fiscal_year_start_month: int = 1  # January
     
     def __post_init__(self):
         # NAV tracking

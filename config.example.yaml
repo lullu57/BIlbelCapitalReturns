@@ -57,9 +57,9 @@ thresholds:
 # Reporting periods configuration
 periods:
   # Fiscal year start month (1 = January, 2 = February, etc.)
-  # February means fiscal year runs Feb 1 - Jan 31
+  # January means fiscal year runs Jan 1 - Dec 31
   # This also sets quarter boundaries for fee timing
-  fiscal_year_start_month: 2
+  fiscal_year_start_month: 1
   
   # Years to calculate returns for
   # Update this list to include your reporting years
@@ -79,12 +79,21 @@ paths:
 # Currency settings
 currency:
   base_currency: EUR
+  # Optional reporting currency. If set and different from base_currency,
+  # daily FX conversion is applied using the configured FX rates.
+  report_currency: EUR
   # Flow column names in order of preference
   # The system will use the first matching column found
   flow_columns:
     - "Adjusted EUR"
     - "EUR equivalent"
     - "Amount"
+  # FX rates configuration (required when report_currency != base_currency)
+  fx_rates_file: null
+  fx_rates_sheet: null
+  fx_date_column: "TIME_PERIOD"
+  fx_rate_column: null
+  fx_fill_method: "ffill"
 
 # Brokerage-specific settings
 # These define how to parse data from each brokerage's files
