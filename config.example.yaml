@@ -1,0 +1,94 @@
+# GIPS-Compliant Returns Calculator Configuration
+# ================================================
+# Copy this file to config.yaml and update with your values.
+# Do NOT commit config.yaml to version control.
+
+brokerages:
+  - name: IBKR
+    module: IBKR
+    enabled: true
+  - name: Exante
+    module: Exante
+    enabled: true
+
+# Clients are auto-discovered from CSV files in the input directory.
+# This section is optional and informational.
+clients: []
+
+fees:
+  # 0.25% per quarter = 1% annual equivalent
+  management_fee_quarterly: 0.0025
+  performance_fee_rate: 0.25
+  hurdle_rate_annual: 0.06
+
+thresholds:
+  large_cash_flow_pct: 0.10
+
+periods:
+  # January = calendar-year fiscal periods
+  fiscal_year_start_month: 1
+  reporting_years:
+    - 2022
+    - 2023
+    - 2024
+    - 2025
+
+paths:
+  input_dir: input
+  output_dir: results
+  log_dir: logs
+
+currency:
+  base_currency: EUR
+  report_currency: EUR
+  flow_columns:
+    - "Adjusted EUR"
+    - "EUR equivalent"
+    - "Amount"
+  # Required when report_currency differs from base_currency
+  fx_rates_file: null
+  fx_rates_sheet: null
+  fx_date_column: "TIME_PERIOD"
+  fx_rate_column: null
+  fx_fill_method: "ffill"
+
+# Optional NAV adjustments.
+# Configure real values in local config.yaml only (config.yaml is gitignored).
+# Remove this block if not needed.
+nav_adjustments:
+  - brokerage: "IBKR"
+    clients: ["ClientA", "ClientB"]
+    start_date: "YYYY-MM-DD"
+    amount: 0.0
+    currency: "EUR"
+    distribute: "weights"  # one of: equal, per_account, weights
+    weights:
+      ClientA: 1.0
+      ClientB: 1.0
+
+brokerage_settings:
+  IBKR:
+    nav_file: "allocation_by_asset_class.csv"
+    nav_column: "NAV"
+    date_formats:
+      - "%Y%m%d"
+      - "%m/%d/%y"
+    flow_file: "deposits_and_withdrawals.csv"
+    flow_amount_column: "Amount"
+    include_patterns:
+      - "Cash Receipts / Electronic Fund Transfers"
+      - "Disbursement Initiated By"
+    exclude_patterns:
+      - "Quantity:"
+      - "Adjustment: Cash Receipt / Disbursement / Transfer"
+      - "Adjustment:"
+
+  Exante:
+    nav_file: "NAV.xlsx"
+    nav_column: "Net Asset Value"
+    date_column: "Date"
+    flow_file: "Trades.xlsx"
+    flow_amount_column: "EUR equivalent"
+    flow_date_column: "When"
+    operation_types:
+      - "FUNDING/WITHDRAWAL"
