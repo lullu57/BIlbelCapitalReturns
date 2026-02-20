@@ -54,7 +54,7 @@ fees:
 
 # Fiscal year configuration
 periods:
-  fiscal_year_start_month: 2        # February
+  fiscal_year_start_month: 1        # January (calendar year)
   reporting_years: [2022, 2023, 2024, 2025]
 ```
 
@@ -77,6 +77,42 @@ nav_adjustments:
 ```
 
 `config.yaml` is ignored by git; keep any real NAV adjustment amounts and weights there.
+
+### FX Reporting (Base to Report Currency)
+
+If you want reports in a different currency than your `base_currency`, set
+`report_currency` and provide an FX rates workbook.
+
+Configuration fields:
+
+```yaml
+currency:
+  base_currency: EUR
+  report_currency: USD
+  fx_rates_file: "FX-Rates.xlsx"
+  fx_rates_sheet: "USDEUR"     # optional; defaults to first sheet
+  fx_date_column: "TIME_PERIOD"
+  fx_rate_column: null         # optional explicit rate column name
+```
+
+Expected FX input is a date-indexed rate list (one row per available rate date).
+The loader will:
+- parse `fx_date_column` as dates,
+- auto-detect either `EUR/USD` or `USD/EUR` style columns,
+- invert automatically when needed,
+- use the last available prior rate for missing dates.
+
+Example FX table:
+
+| TIME_PERIOD | EUR/USD |
+|------------|---------|
+| 2025-01-01 | 1.1025  |
+| 2025-01-02 | 1.0981  |
+| 2025-01-03 | 1.1040  |
+
+Notes:
+- If `report_currency == base_currency`, no FX conversion is applied.
+- If currencies differ and `fx_rates_file` is missing, the run fails fast.
 
 ### Directory Structure
 
@@ -259,10 +295,10 @@ Total Flows: €25,000.00
 Total Fees: €37,120.25 (Mgmt: €4,120 + Perf: €33,000)
 Fee Impact: €37,120.25
 
-2022 Returns (Fiscal Feb-Jan): Gross 22.50% → Net 18.15%
-2023 Returns (Fiscal Feb-Jan): Gross 15.10% → Net 12.30%
-2024 Returns (Fiscal Feb-Jan): Gross 35.40% → Net 28.90%
-2025 Returns (Fiscal YTD): Gross 12.20% → Net 9.80%
+2022 Returns (Reporting Period): Gross 22.50% → Net 18.15%
+2023 Returns (Reporting Period): Gross 15.10% → Net 12.30%
+2024 Returns (Reporting Period): Gross 35.40% → Net 28.90%
+2025 Returns (Reporting YTD): Gross 12.20% → Net 9.80%
 ```
 
 ## GIPS Compliance Features
@@ -291,8 +327,9 @@ pytest -n auto
 
 ## Notes
 
-- All monetary values are converted to EUR
-- Fiscal year defaults to February start (Feb 1 - Jan 31)
+- Monetary values are processed in `base_currency`; optional conversion to
+  `report_currency` is supported with configured FX rates
+- Fiscal year defaults to January start (calendar year)
 - Logs are generated in the logs directory
 - Configuration file (`config.yaml`) is gitignored for security
 

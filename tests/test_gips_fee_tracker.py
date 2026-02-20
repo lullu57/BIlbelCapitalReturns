@@ -33,7 +33,7 @@ class TestGIPSFeeTrackerInit:
         assert tracker.quarterly_mgmt_fee == 0.0025
         assert tracker.quarterly_hurdle_rate == 0.015
         assert tracker.perf_fee_rate == 0.25
-        assert tracker.fiscal_year_start_month == 2
+        assert tracker.fiscal_year_start_month == 1
     
     def test_custom_values(self):
         tracker = GIPSFeeTracker(
@@ -278,7 +278,7 @@ class TestFlowProration:
         fee = tracker.apply_performance_fee(quarter=1, fiscal_year="2024", fee_date=fee_date)
 
         days_in_quarter = tracker.days_in_current_quarter
-        factor = (fee_date - flow_date).days / days_in_quarter
+        factor = ((fee_date - flow_date).days + 1) / days_in_quarter
         fee_base = 140000.0 - 40000.0 * (1 - factor)
 
         pre_fee_index = 1.10
@@ -328,7 +328,7 @@ class TestFlowProration:
         fee_adj = tracker.apply_management_fee_adjustment(quarter=1, fiscal_year="2024", fee_date=fee_date)
 
         days_in_quarter = tracker.days_in_current_quarter
-        days_remaining = (fee_date - inflow_date).days
+        days_remaining = (fee_date - inflow_date).days + 1
         factor = days_remaining / days_in_quarter
         expected_base = 40000.0 * factor
         expected_fee = expected_base * tracker.quarterly_mgmt_fee
@@ -378,8 +378,12 @@ class TestFlowProration:
         fee_event = perf_events[-1]
 
         days_in_quarter = tracker.days_in_current_quarter
-        factor = 1 / days_in_quarter
-        expected_fee_base = 120000.0 - 10000.0 * (1 - factor)
+        flow_1_factor = ((date(2024, 4, 30) - date(2024, 4, 29)).days + 1) / days_in_quarter
+        flow_2_factor = ((date(2024, 4, 30) - date(2024, 4, 30)).days + 1) / days_in_quarter
+        # pre-fee inflows include 4/29 (+10k) and fee-day inflow 4/30 (+5k)
+        expected_fee_base = 125000.0
+        expected_fee_base -= 10000.0 * (1 - flow_1_factor)
+        expected_fee_base -= 5000.0 * (1 - flow_2_factor)
 
         assert fee_event['fee_base'] == pytest.approx(expected_fee_base, rel=1e-6)
         assert tracker.total_flows == pytest.approx(13000.0)

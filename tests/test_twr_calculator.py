@@ -42,12 +42,13 @@ class TestCalculateSubPeriodReturns:
         assert 'total_flow' in result.columns
     
     def test_return_formula(self, nav_df, trades_df):
-        """Test TWR formula: r = (end - start - flow) / start."""
+        """Test TWR formula: r = (end + outflow) / (start + inflow) - 1."""
         result = twr.calculate_sub_period_returns(nav_df, trades_df)
         
-        # First period: (108000 - 100000 - 5000) / 100000 = 0.03
+        # First period has one inflow (5000) and no outflow:
+        # (108000 + 0) / (100000 + 5000) - 1 = 0.028571...
         first_return = result.iloc[0]['return']
-        expected_first = (108000 - 100000 - 5000) / 100000
+        expected_first = (108000 + 0) / (100000 + 5000) - 1
         assert abs(first_return - expected_first) < 0.0001
     
     def test_large_flow_flagging(self, nav_df, trades_df):
@@ -318,4 +319,3 @@ class TestAggregationContinuity:
         for col in ['date', 'return', 'start_nav', 'end_nav', 'flow']:
             assert col in combined_daily.columns
         assert len(combined_daily) == 2
-
